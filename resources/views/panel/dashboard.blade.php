@@ -23,7 +23,7 @@
             </div>
             <div class="font-mono text-[10px] tracking-[0.22em] uppercase text-paper-dim text-right hidden lg:block">
                 <div>Sesi:</div>
-                <div class="font-serif italic text-copper text-3xl mt-1" style="font-variation-settings: 'opsz' 72, 'wght' 300, 'WONK' 1;">{{ now()->format('H:i') }}</div>
+                <div class="font-serif italic text-copper text-3xl mt-1" style="font-variation-settings: 'opsz' 72, 'wght' 300, 'WONK' 1;">{{ now()->setTimezone('Asia/Jakarta')->format('H:i') }}</div>
             </div>
         </div>
     </div>
