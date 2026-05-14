@@ -1,267 +1,367 @@
 @extends('panel.layout')
 
-@section('title', 'Laravel Tools')
+@section('title', 'Tools')
+@section('section-label', 'Modul · N° 004')
+@section('breadcrumb', 'Tools')
 
 @section('content')
-<div class="topbar">
-    <div class="page-title">Laravel Tools</div>
-    @if($currentProject)
-        <span class="project-badge">{{ $currentProject['name'] }}</span>
-    @endif
-</div>
+<div x-data="toolsApp({{ json_encode($suggestedCommands) }}, {{ json_encode($allProjects) }})">
 
-<!-- Command Categories -->
-<div class="card">
-    <div class="card-title" style="margin-bottom: 16px;">Quick Commands</div>
-    
-    <div class="tabs" style="margin-bottom: 20px;">
-        <button class="tab active" onclick="showCategory('cache')">Cache & Config</button>
-        <button class="tab" onclick="showCategory('migrate')">Database</button>
-        <button class="tab" onclick="showCategory('queue')">Queue</button>
-        <button class="tab" onclick="showCategory('logs')">Logs</button>
-        <button class="tab" onclick="showCategory('custom')">Custom</button>
-    </div>
-    
-    <!-- Cache Commands -->
-    <div id="cat-cache" class="command-category">
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;">
-            <button class="btn btn-gray" onclick="runArtisan('cache:clear')">
-                <i class="fas fa-broom"></i> cache:clear
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('config:clear')">
-                <i class="fas fa-cog"></i> config:clear
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('view:clear')">
-                <i class="fas fa-eye"></i> view:clear
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('route:clear')">
-                <i class="fas fa-route"></i> route:clear
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('event:clear')">
-                <i class="fas fa-bolt"></i> event:clear
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('optimize:clear')">
-                <i class="fas fa-trash"></i> optimize:clear
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('config:cache')">
-                <i class="fas fa-database"></i> config:cache
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('route:cache')">
-                <i class="fas fa-save"></i> route:cache
-            </button>
+    <!-- Editorial Header -->
+    <div class="mb-12 animate-fade-up">
+        <div class="grid lg:grid-cols-[1fr_auto] gap-8 items-end pb-8 border-b border-[color:var(--rule)]">
+            <div>
+                <div class="section-label mb-6">Peralatan Laravel</div>
+                <h1 class="title-editorial">
+                    Artisan,<br>
+                    <span class="italic">Composer</span>, dan kawan.
+                </h1>
+                <p class="font-serif text-base text-paper-soft leading-relaxed max-w-lg mt-6">
+                    Jalankan perintah, pantau log, kelola antrian — tanpa membuka SSH.
+                </p>
+            </div>
         </div>
     </div>
-    
-    <!-- Migrate Commands -->
-    <div id="cat-migrate" class="command-category" style="display: none;">
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;">
-            <button class="btn btn-blue" onclick="runArtisan('migrate')">
-                <i class="fas fa-play"></i> migrate
-            </button>
-            <button class="btn btn-red" onclick="runArtisan('migrate:fresh')">
-                <i class="fas fa-refresh"></i> migrate:fresh
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('migrate:rollback')">
-                <i class="fas fa-undo"></i> migrate:rollback
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('migrate:status')">
-                <i class="fas fa-list"></i> migrate:status
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('db:seed')">
-                <i class="fas fa-database"></i> db:seed
-            </button>
+
+    @if(!$activeProject)
+    <div class="text-center py-24 border border-[color:var(--rule)] animate-fade-up-1">
+        <div class="glyph text-6xl mb-6 opacity-50">∅</div>
+        <p class="font-serif italic text-xl text-paper-soft mb-2">Tidak ada proyek aktif.</p>
+        <p class="font-mono text-[10px] tracking-[0.22em] uppercase text-paper-dim">Pilih proyek di sidebar untuk membuka peralatan.</p>
+    </div>
+    @else
+
+    <!-- Tabs -->
+    <div class="tabs-editorial animate-fade-up-1">
+        <button @click="activeTab = 'artisan'" class="tab-editorial" :class="activeTab === 'artisan' ? 'active' : ''">
+            <span class="glyph text-base leading-none">α</span> Artisan
+        </button>
+        <button @click="activeTab = 'logs'; loadLogs()" class="tab-editorial" :class="activeTab === 'logs' ? 'active' : ''">
+            <span class="glyph text-base leading-none">β</span> Catatan
+        </button>
+        <button @click="activeTab = 'queue'; loadQueueStatus()" class="tab-editorial" :class="activeTab === 'queue' ? 'active' : ''">
+            <span class="glyph text-base leading-none">γ</span> Antrian
+        </button>
+        <button @click="activeTab = 'composer'" class="tab-editorial" :class="activeTab === 'composer' ? 'active' : ''">
+            <span class="glyph text-base leading-none">δ</span> Composer & NPM
+        </button>
+    </div>
+
+    <!-- Artisan Tab -->
+    <div x-show="activeTab === 'artisan'" x-cloak class="animate-fade-up-2">
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px_auto] gap-3 mb-6">
+            <div>
+                <label class="label-mono">Perintah</label>
+                <select x-model="artisanCommand" class="select-editorial">
+                    <option value="">— Pilih perintah —</option>
+                    <template x-for="cmd in suggestedCommands" :key="cmd">
+                        <option :value="cmd" x-text="cmd"></option>
+                    </template>
+                </select>
+            </div>
+            <div>
+                <label class="label-mono">Opsi</label>
+                <input type="text" x-model="artisanOptions" placeholder="--seed --force" class="input-editorial">
+            </div>
+            <div class="flex items-end">
+                <button @click="runArtisan()" :disabled="!artisanCommand || artisanRunning" class="btn-copper" :class="{ 'disabled': !artisanCommand || artisanRunning }">
+                    <span x-text="artisanRunning ? 'Menjalankan…' : 'Eksekusi'"></span>
+                    <span class="font-serif italic" x-show="!artisanRunning">↗</span>
+                </button>
+            </div>
+        </div>
+
+        <div x-show="artisanOutput" class="border border-[color:var(--rule)]">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-[color:var(--rule)] bg-ink-soft">
+                <span class="section-label">Keluaran</span>
+                <button @click="artisanOutput = ''" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-copper transition-colors">Bersihkan ↗</button>
+            </div>
+            <pre class="bg-ink p-5 font-mono text-[11px] text-paper-soft whitespace-pre-wrap max-h-[480px] overflow-y-auto leading-relaxed" x-text="artisanOutput"></pre>
         </div>
     </div>
-    
-    <!-- Queue Commands -->
-    <div id="cat-queue" class="command-category" style="display: none;">
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;">
-            <button class="btn btn-gray" onclick="runArtisan('queue:restart')">
-                <i class="fas fa-sync"></i> queue:restart
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('queue:flush')">
-                <i class="fas fa-trash"></i> queue:flush
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('queue:prune-batches')">
-                <i class="fas fa-clock"></i> queue:prune-batches
-            </button>
-            <button class="btn btn-gray" onclick="runArtisan('queue:work --once')">
-                <i class="fas fa-play-circle"></i> queue:work --once
-            </button>
+
+    <!-- Logs Tab -->
+    <div x-show="activeTab === 'logs'" x-cloak class="animate-fade-up-2">
+        <div class="grid grid-cols-1 sm:grid-cols-[180px_1fr_auto_auto] gap-3 mb-6 items-end">
+            <div>
+                <label class="label-mono">Tingkat</label>
+                <select x-model="logFilter" @change="loadLogs()" class="select-editorial">
+                    <option value="all">Semua</option>
+                    <option value="error">Error</option>
+                    <option value="warning">Warning</option>
+                    <option value="info">Info</option>
+                    <option value="debug">Debug</option>
+                </select>
+            </div>
+            <div>
+                <label class="label-mono">Pencarian</label>
+                <input type="text" x-model="logSearch" @input="loadLogs()" placeholder="Cari..." class="input-editorial">
+            </div>
+            <label class="font-mono text-[10px] tracking-[0.22em] uppercase text-paper-dim flex items-center gap-2 pb-3">
+                <input type="checkbox" x-model="autoRefresh" @change="toggleAutoRefresh()" style="accent-color: var(--copper);">
+                Auto · 5s
+            </label>
+            <button @click="clearLogs()" class="btn-danger pb-3" style="padding: 12px 18px;">Bersihkan</button>
+        </div>
+
+        <div class="border border-[color:var(--rule)] bg-ink">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-[color:var(--rule)] bg-ink-soft">
+                <span class="section-label">Catatan Laravel</span>
+                <span class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim" x-text="`${logs.length} baris`"></span>
+            </div>
+            <div class="p-5 font-mono text-[11px] max-h-[560px] overflow-y-auto leading-relaxed">
+                <template x-for="(line, i) in logs" :key="i">
+                    <div class="py-0.5 border-b border-[color:var(--rule)] last:border-0"
+                         :class="{
+                            'text-[color:var(--rust)]': line.includes('ERROR') || line.includes('[ERROR]'),
+                            'text-[color:#c8a04a]': (line.includes('WARNING') || line.includes('[WARNING]')) && !line.includes('ERROR'),
+                            'text-[color:var(--copper)]': line.includes('INFO') && !line.includes('ERROR') && !line.includes('WARNING'),
+                            'text-paper-soft': !line.includes('ERROR') && !line.includes('WARNING') && !line.includes('INFO')
+                         }"
+                         x-text="line"></div>
+                </template>
+                <div x-show="logs.length === 0" class="font-serif italic text-paper-dim py-6 text-center">Tidak ada catatan.</div>
+            </div>
+            <div x-show="logs.length > 0" class="px-5 py-3 border-t border-[color:var(--rule)] bg-ink-soft">
+                <button @click="loadMoreLogs()" class="btn-mini">Muat lebih banyak →</button>
+            </div>
         </div>
     </div>
-    
-    <!-- Logs -->
-    <div id="cat-logs" class="command-category" style="display: none;">
-        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-            <select id="log-lines" class="select" style="width: 150px;">
-                <option value="50">Last 50 lines</option>
-                <option value="100" selected>Last 100 lines</option>
-                <option value="200">Last 200 lines</option>
-                <option value="500">Last 500 lines</option>
+
+    <!-- Queue Tab -->
+    <div x-show="activeTab === 'queue'" x-cloak class="animate-fade-up-2">
+        <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-6 items-end mb-6 pb-4 border-b border-[color:var(--rule)]">
+            <div>
+                <div class="section-label mb-3">Antrian</div>
+                <div class="font-serif text-3xl text-paper" style="font-variation-settings: 'opsz' 144, 'wght' 500, 'WONK' 1;">
+                    Pekerjaan <span class="italic text-copper">gagal</span>:
+                    <span class="font-mono text-3xl text-copper" x-text="failedCount"></span>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <button @click="queueAction('restart')" class="btn-mini">⟲ Restart Worker</button>
+                <button @click="queueAction('flush')" class="btn-mini">↯ Flush Failed</button>
+            </div>
+        </div>
+
+        <div class="border border-[color:var(--rule)] overflow-x-auto">
+            <table class="table-editorial">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Antrian</th>
+                        <th>Gagal Pada</th>
+                        <th>Pengecualian</th>
+                        <th class="text-right">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="job in failedJobs" :key="job.id">
+                        <tr>
+                            <td class="text-paper" x-text="job.id"></td>
+                            <td class="text-paper-soft" x-text="job.queue"></td>
+                            <td class="text-paper-dim text-[10px]" x-text="job.failed_at"></td>
+                            <td class="text-[color:var(--rust)]/80 text-[10px] truncate max-w-[400px]" :title="job.exception" x-text="job.exception"></td>
+                            <td class="text-right">
+                                <button @click="retryJob(job.id)" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-copper transition-colors">Coba Lagi ↗</button>
+                            </td>
+                        </tr>
+                    </template>
+                    <tr x-show="failedJobs.length === 0">
+                        <td colspan="5" class="text-center py-12 font-serif italic text-paper-dim">Tidak ada pekerjaan gagal.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Composer & NPM Tab -->
+    <div x-show="activeTab === 'composer'" x-cloak class="animate-fade-up-2">
+        <div class="mb-8">
+            <label class="label-mono">Jalankan pada proyek</label>
+            <select x-model="composerProject" class="select-editorial" style="max-width: 320px;">
+                <option value="">— Proyek aktif —</option>
+                <template x-for="(proj, key) in projects" :key="key">
+                    <option :value="key" x-text="proj.display_name || key"></option>
+                </template>
             </select>
-            <button class="btn btn-blue" onclick="loadLogs()">
-                <i class="fas fa-sync"></i> Refresh Logs
-            </button>
         </div>
-        <div id="log-content">
-            <div class="loading"><i class="fas fa-spinner"></i> Loading logs...</div>
-        </div>
-    </div>
-    
-    <!-- Custom Command -->
-    <div id="cat-custom" class="command-category" style="display: none;">
-        <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-            <input type="text" id="custom-command" class="input" placeholder="php artisan make:controller UserController" style="flex: 1;">
-            <button class="btn btn-blue" onclick="runCustomArtisan()">
-                <i class="fas fa-terminal"></i> Run
-            </button>
-        </div>
-        <div class="alert alert-warning">
-            <i class="fas fa-info-circle"></i> Only whitelisted commands are allowed for security.
-        </div>
-    </div>
-</div>
 
-<!-- Terminal Output -->
-<div class="card">
-    <div class="card-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <span>Terminal Output</span>
-        <div style="display: flex; gap: 8px;">
-            <button class="btn btn-sm btn-gray" onclick="copyOutput()">
-                <i class="fas fa-copy"></i> Copy
-            </button>
-            <button class="btn btn-sm btn-gray" onclick="clearOutput()">
-                <i class="fas fa-trash"></i> Clear
-            </button>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-px bg-[color:var(--rule)] border border-[color:var(--rule)] mb-8">
+
+            <!-- Composer -->
+            <div class="bg-ink p-7">
+                <div class="flex items-center justify-between mb-5 pb-4 border-b border-[color:var(--rule)]">
+                    <div>
+                        <div class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim mb-1">N° 001</div>
+                        <h3 class="font-serif text-2xl text-paper" style="font-variation-settings: 'opsz' 60, 'wght' 500, 'WONK' 1;">
+                            Compo<span class="italic text-copper">ser</span>
+                        </h3>
+                    </div>
+                    <span class="glyph text-3xl leading-none">α</span>
+                </div>
+                <div class="space-y-2">
+                    <button @click="runComposer('install')" :disabled="composerRunning" class="btn-ghost w-full justify-between" :class="{ 'disabled': composerRunning }">
+                        <span>Install</span>
+                        <span class="font-serif italic">↓</span>
+                    </button>
+                    <button @click="runComposer('update')" :disabled="composerRunning" class="btn-ghost w-full justify-between" :class="{ 'disabled': composerRunning }">
+                        <span>Update</span>
+                        <span class="font-serif italic">⟳</span>
+                    </button>
+                    <button @click="runComposer('dump-autoload')" :disabled="composerRunning" class="btn-ghost w-full justify-between" :class="{ 'disabled': composerRunning }">
+                        <span>Dump Autoload</span>
+                        <span class="font-serif italic">⊡</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- NPM -->
+            <div class="bg-ink p-7">
+                <div class="flex items-center justify-between mb-5 pb-4 border-b border-[color:var(--rule)]">
+                    <div>
+                        <div class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim mb-1">N° 002</div>
+                        <h3 class="font-serif text-2xl text-paper" style="font-variation-settings: 'opsz' 60, 'wght' 500, 'WONK' 1;">
+                            <span class="italic text-copper">NPM</span>
+                        </h3>
+                    </div>
+                    <span class="glyph text-3xl leading-none">β</span>
+                </div>
+                <div class="space-y-2">
+                    <button @click="runNpm('install')" :disabled="npmRunning" class="btn-ghost w-full justify-between" :class="{ 'disabled': npmRunning }">
+                        <span>Install</span>
+                        <span class="font-serif italic">↓</span>
+                    </button>
+                    <button @click="runNpm('run build')" :disabled="npmRunning" class="btn-ghost w-full justify-between" :class="{ 'disabled': npmRunning }">
+                        <span>Build</span>
+                        <span class="font-serif italic">▲</span>
+                    </button>
+                    <button @click="runNpm('run dev')" :disabled="npmRunning" class="btn-ghost w-full justify-between" :class="{ 'disabled': npmRunning }">
+                        <span>Dev</span>
+                        <span class="font-serif italic">»</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output -->
+        <div x-show="composerOutput || npmOutput" class="border border-[color:var(--rule)]">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-[color:var(--rule)] bg-ink-soft">
+                <span class="section-label">Keluaran</span>
+                <button @click="composerOutput = ''; npmOutput = ''" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-copper transition-colors">Bersihkan ↗</button>
+            </div>
+            <pre class="bg-ink p-5 font-mono text-[11px] text-paper-soft whitespace-pre-wrap max-h-[480px] overflow-y-auto leading-relaxed" x-text="composerOutput || npmOutput"></pre>
         </div>
     </div>
-    <pre id="terminal-output" class="code-display" style="max-height: 400px; min-height: 150px;">$ Ready for commands...</pre>
+
+    @endif
+
 </div>
 @endsection
 
-@section('scripts')
+@push('scripts')
 <script>
-function showCategory(cat) {
-    document.querySelectorAll('.command-category').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
-    document.getElementById('cat-' + cat).style.display = 'block';
-    event.target.classList.add('active');
-    
-    if (cat === 'logs') loadLogs();
-}
+function toolsApp(suggestedCommands, projects) {
+    return {
+        suggestedCommands, projects,
+        activeTab: 'artisan',
+        artisanCommand: '', artisanOptions: '', artisanRunning: false, artisanOutput: '',
+        logs: [], logFilter: 'all', logSearch: '', autoRefresh: false, autoRefreshTimer: null,
+        failedJobs: [], failedCount: 0,
+        composerProject: '', composerRunning: false, npmRunning: false, composerOutput: '', npmOutput: '',
+        csrf: document.querySelector('meta[name="csrf-token"]')?.content || '',
 
-async function runArtisan(command) {
-    const output = document.getElementById('terminal-output');
-    output.textContent = `$ php artisan ${command}\n\n`;
-    output.textContent += '⏳ Running...\n\n';
-    
-    try {
-        const response = await fetch('{{ route("panel.api.artisan") }}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-            body: JSON.stringify({ command })
-        });
-        const result = await response.json();
-        
-        if (result.output) {
-            output.textContent += result.output + '\n';
-        }
-        if (result.error) {
-            output.textContent += '\n❌ ERROR:\n' + result.error + '\n';
-        }
-        if (result.success) {
-            output.textContent += '\n✅ Command completed successfully (exit code: ' + result.exit_code + ')';
-        } else {
-            output.textContent += '\n⚠️ Command finished with exit code: ' + result.exit_code;
-        }
-    } catch (e) {
-        output.textContent += '\n❌ Request failed: ' + e.message;
-    }
-    
-    output.scrollTop = output.scrollHeight;
-}
+        async runArtisan() {
+            this.artisanRunning = true; this.artisanOutput = '';
+            const projectPath = this.composerProject ? (this.projects[this.composerProject]?.path || '') : '';
+            try {
+                const res = await fetch('{{ route("panel.api.artisan") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf },
+                    body: JSON.stringify({ command: this.artisanCommand + (this.artisanOptions ? ' ' + this.artisanOptions : ''), project_path: projectPath })
+                });
+                const data = await res.json();
+                this.artisanOutput = (data.output || '') + (data.error ? '\n' + data.error : '');
+                if (!data.success) showToast('Perintah gagal', 'error');
+                else showToast('Selesai');
+            } catch(e) { this.artisanOutput = 'Permintaan gagal'; }
+            this.artisanRunning = false;
+        },
 
-async function runCustomArtisan() {
-    const command = document.getElementById('custom-command').value.trim();
-    if (!command) return alert('Please enter a command');
-    runArtisan(command);
-}
+        async loadLogs(offset = 0) {
+            try {
+                const params = new URLSearchParams({ filter: this.logFilter, search: this.logSearch, lines: 100, offset });
+                const res = await fetch(`{{ route("panel.api.logs") }}?${params}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                const data = await res.json();
+                this.logs = data.logs || [];
+            } catch(e) { this.logs = []; }
+        },
 
-async function loadLogs() {
-    const lines = document.getElementById('log-lines').value;
-    const output = document.getElementById('log-content');
-    
-    output.innerHTML = '<div class="loading"><i class="fas fa-spinner"></i> Loading logs...</div>';
-    
-    try {
-        const response = await fetch('{{ route("panel.api.logs") }}?lines=' + lines);
-        const result = await response.json();
-        
-        if (result.error) {
-            output.innerHTML = `<div class="alert alert-error">${result.error}</div>`;
-            return;
-        }
-        
-        if (result.logs && result.logs.length > 0) {
-            let html = '<div class="code-display" style="max-height: 400px; overflow-y: auto;">';
-            result.logs.forEach(line => {
-                // Color code by level
-                if (line.includes('ERROR') || line.includes('emergency')) {
-                    html += `<span style="color: #ef4444;">${escapeHtml(line)}</span>\n`;
-                } else if (line.includes('WARNING') || line.includes('alert')) {
-                    html += `<span style="color: #f97316;">${escapeHtml(line)}</span>\n`;
-                } else if (line.includes('INFO') || line.includes('notice')) {
-                    html += `<span style="color: #38bdf8;">${escapeHtml(line)}</span>\n`;
-                } else {
-                    html += escapeHtml(line) + '\n';
-                }
+        loadMoreLogs() { this.loadLogs(this.logs.length); },
+
+        async clearLogs() {
+            if (!confirm('Bersihkan semua catatan?')) return;
+            await fetch('{{ route("panel.api.logs-clear") }}', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf } });
+            this.logs = []; showToast('Catatan dibersihkan');
+        },
+
+        toggleAutoRefresh() {
+            if (this.autoRefresh) this.autoRefreshTimer = setInterval(() => this.loadLogs(), 5000);
+            else clearInterval(this.autoRefreshTimer);
+        },
+
+        async loadQueueStatus() {
+            try {
+                const res = await fetch('{{ route("panel.api.queue-status") }}', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                const data = await res.json();
+                this.failedJobs = data.failed_jobs || [];
+                this.failedCount = data.failed_count || 0;
+            } catch(e) { this.failedJobs = []; this.failedCount = 0; }
+        },
+
+        async retryJob(id) {
+            await fetch(`{{ route("panel.api.queue-retry", ["id" => "__I__"]) }}`.replace('__I__', id), {
+                method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf }
             });
-            html += '</div>';
-            output.innerHTML = html;
-        } else {
-            output.innerHTML = '<div class="alert alert-warning">No log entries found</div>';
+            this.loadQueueStatus(); showToast('Pekerjaan dijadwalkan ulang');
+        },
+
+        async queueAction(action) {
+            const route = action === 'restart' ? '{{ route("panel.api.queue-restart") }}' : '{{ route("panel.api.queue-flush") }}';
+            await fetch(route, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf } });
+            this.loadQueueStatus(); showToast(`Antrian: ${action} berhasil`);
+        },
+
+        async runComposer(command) {
+            this.composerRunning = true; this.composerOutput = '';
+            const projectPath = this.composerProject ? (this.projects[this.composerProject]?.path || '') : '';
+            try {
+                const res = await fetch('{{ route("panel.api.composer") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf },
+                    body: JSON.stringify({ command, project_path: projectPath })
+                });
+                const data = await res.json();
+                this.composerOutput = (data.output || '') + (data.error ? '\n' + data.error : '');
+            } catch(e) { this.composerOutput = 'Permintaan gagal'; }
+            this.composerRunning = false;
+        },
+
+        async runNpm(command) {
+            this.npmRunning = true; this.npmOutput = '';
+            const projectPath = this.composerProject ? (this.projects[this.composerProject]?.path || '') : '';
+            try {
+                const res = await fetch('{{ route("panel.api.npm") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf },
+                    body: JSON.stringify({ command, project_path: projectPath })
+                });
+                const data = await res.json();
+                this.npmOutput = (data.output || '') + (data.error ? '\n' + data.error : '');
+            } catch(e) { this.npmOutput = 'Permintaan gagal'; }
+            this.npmRunning = false;
         }
-    } catch (e) {
-        output.innerHTML = `<div class="alert alert-error">Failed to load logs: ${e.message}</div>`;
-    }
+    };
 }
-
-function copyOutput() {
-    const text = document.getElementById('terminal-output').textContent;
-    navigator.clipboard.writeText(text).then(() => {
-        showNotification('Copied to clipboard!', 'success');
-    });
-}
-
-function clearOutput() {
-    document.getElementById('terminal-output').textContent = '$ Ready for commands...';
-}
-
-function showNotification(message, type) {
-    const status = document.createElement('div');
-    status.style.cssText = 'position: fixed; bottom: 20px; right: 20px; background: #1e293b; border-left: 4px solid ' + 
-        (type === 'success' ? '#22c55e' : type === 'error' ? '#ef4444' : '#38bdf8') + 
-        '; padding: 12px 16px; border-radius: 8px; color: #e2e8f0; font-size: 13px; z-index: 1000;';
-    status.innerHTML = message;
-    document.body.appendChild(status);
-    setTimeout(() => status.remove(), 3000);
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// Load logs on page load if tab is active
-document.addEventListener('DOMContentLoaded', () => {
-    // Pre-load logs
-});
-
-// Enter key for custom command
-document.getElementById('custom-command').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') runCustomArtisan();
-});
 </script>
-@endsection
+@endpush

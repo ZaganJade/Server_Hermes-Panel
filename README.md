@@ -1,58 +1,92 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Hermes Panel
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A cPanel-like server administration panel for managing multiple Laravel projects on a VPS. Built with Laravel 13, Alpine.js, and Tailwind CSS.
 
-## About Laravel
+## Features
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Authentication**: Password login + WhatsApp number header bypass
+- **Dashboard**: System stats, quick actions, project overview cards
+- **Project Management**: Auto-discovery of Laravel projects, manual add, hide/delete
+- **Database Manager**: Multi-DB connection support, SQL editor, browse data, export (JSON/CSV)
+- **File Manager**: Browse, edit, upload, download (zip), search, chmod, built-in terminal
+- **Laravel Tools**: Artisan runner, log viewer, queue monitor, Composer & NPM commands
+- **Terminal**: Full SSH-like web terminal via xterm.js + WebSocket (Reverb)
+- **Dark/Light Theme**: Toggle between dark (default) and light modes, persisted in localStorage
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Requirements
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- PHP 8.3+
+- Docker & Docker Compose
+- Node.js 20+ (for asset building)
 
-## Learning Laravel
+## Docker Setup
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+1. Clone the repository and configure environment:
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+cp .env.example .env
+# Edit .env with your settings (PANEL_USERNAME, PANEL_PASSWORD, etc.)
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+2. Build and start:
 
-## Contributing
+```bash
+docker compose up -d --build
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+3. Access the panel at `http://your-vps-ip:8000`
 
-## Code of Conduct
+## Configuration
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+| Variable | Default | Description |
+|---|---|---|
+| `PANEL_NAME` | `Hermes Panel` | Panel display name |
+| `PANEL_USERNAME` | `admin` | Login username |
+| `PANEL_PASSWORD` | *(required)* | Login password |
+| `PANEL_SESSION_LIFETIME` | `120` | Session lifetime (minutes) |
+| `PANEL_OWNER_NUMBERS` | `""` | WhatsApp numbers (comma-separated, with country code) |
+| `PANEL_PROJECTS_DIR` | `Project` | Directory containing managed projects |
+| `PANEL_MAX_UPLOAD_SIZE` | `10485760` | Max file upload size (bytes, default 10MB) |
 
-## Security Vulnerabilities
+## Architecture
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```
+app/
+├── Http/
+│   ├── Controllers/Panel/
+│   │   ├── AuthController.php
+│   │   ├── DashboardController.php
+│   │   ├── DatabaseController.php
+│   │   ├── FileController.php
+│   │   ├── ProjectController.php
+│   │   ├── TerminalController.php
+│   │   └── ToolController.php
+│   └── Middleware/
+│       └── OwnerAccess.php
+├── Services/
+│   ├── ProjectService.php
+│   ├── DatabaseService.php
+│   └── FileService.php
+├── config/
+│   └── panel.php
+├── resources/
+│   ├── views/panel/
+│   │   ├── layout.blade.php
+│   │   ├── login.blade.php
+│   │   ├── dashboard.blade.php
+│   │   ├── projects.blade.php
+│   │   ├── database.blade.php
+│   │   ├── files.blade.php
+│   │   └── tools.blade.php
+│   ├── css/app.css
+│   └── js/app.js
+└── docker/
+    ├── Dockerfile
+    ├── nginx.conf
+    ├── php-fpm.conf
+    └── supervisord.conf
+```
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Proprietary. All rights reserved.
