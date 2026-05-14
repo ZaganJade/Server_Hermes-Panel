@@ -68,6 +68,9 @@
                     style="background-image: url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' stroke='%23d4a45c' stroke-width='1.2' fill='none'/%3E%3C/svg%3E&quot;); background-repeat: no-repeat; background-position: right 12px center; background-size: 10px; appearance: none; padding-right: 32px;"
                     onchange="switchProject(this.value)">
                 <option value="">— Tidak Ada —</option>
+                @foreach ($allProjects ?? [] as $name => $project)
+                <option value="{{ $name }}" {{ session('active_project') === $name ? 'selected' : '' }}>{{ $project['display_name'] ?? $name }}</option>
+                @endforeach
             </select>
         </div>
 
@@ -139,8 +142,9 @@
                 <span class="font-mono text-[10px] tracking-[0.2em] uppercase text-paper">@yield('breadcrumb', 'Dashboard')</span>
             </div>
             <div class="flex items-center gap-3 font-mono text-[10px] tracking-[0.2em] uppercase">
+                @php $headerProject = session('active_project', '— None —'); @endphp
                 <span class="text-paper-dim">Proyek:</span>
-                <span id="active-project-name" class="text-copper border border-[color:var(--rule-strong)] px-3 py-1.5">— None —</span>
+                <span id="active-project-name" class="text-copper border border-[color:var(--rule-strong)] px-3 py-1.5">{{ $headerProject === '— None —' ? $headerProject : ($activeProject['display_name'] ?? $headerProject) }}</span>
             </div>
         </header>
 
