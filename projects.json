@@ -1,16 +1,6 @@
 {
-    "desakta": {
-        "name": "DESAKTA",
-        "path": "/home/ZaganJade1/Project/E-Archive_DESAKTA",
-        "env": {
-            "DB_CONNECTION": "mysql",
-            "DB_HOST": "127.0.0.1",
-            "DB_PORT": "3306",
-            "DB_DATABASE": "desakta",
-            "DB_USERNAME": "root",
-            "DB_PASSWORD": ""
-        },
-        "tables": [],
-        "last_activity": null
-    }
+    "manual": {
+        "desakta": "/home/ZaganJade1/hermes-panel/Project/desakta"
+    },
+    "hidden": []
 }
