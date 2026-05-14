@@ -1,0 +1,47 @@
+services:
+  hermes-panel:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: hermes-panel
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./Project:/var/www/html/Project
+      - ./storage:/var/www/html/storage
+    environment:
+      - APP_ENV=production
+      - APP_DEBUG=false
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+  # Optional: Panel database (uncomment if needed)
+  # hermes-db:
+  #   image: mysql:8.0
+  #   container_name: hermes-db
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+  #     MYSQL_DATABASE: hermes_panel
+  #   ports:
+  #     - "3306:3306"
+  #   volumes:
+  #     - hermes-db-data:/var/lib/mysql
+  #   restart: unless-stopped
+
+  # Optional: PostgreSQL alternative
+  # hermes-db:
+  #   image: postgres:16-alpine
+  #   container_name: hermes-db
+  #   environment:
+  #     POSTGRES_DB: hermes_panel
+  #     POSTGRES_USER: ${DB_USERNAME}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - hermes-db-data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+# volumes:
+#   hermes-db-data:
