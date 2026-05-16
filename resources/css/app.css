@@ -470,16 +470,7 @@ html, body {
     }
 }
 
-/* Responsive file cards on mobile */
-@media (max-width: 767px) {
-    .file-list-mobile {
-        display: block;
-    }
-    
-    .file-list-desktop {
-        display: none;
-    }
-}
+
 
 /* Table sticky column for mobile scroll */
 @media (max-width: 767px) {
