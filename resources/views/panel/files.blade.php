@@ -95,10 +95,12 @@
                  @dblclick="navigate(dir.path)"
                  :class="selectedItem === dir.path ? 'bg-ink-soft' : 'hover:bg-ink-soft'">
                 <!-- Desktop Row -->
-                <div class="hidden md:grid grid-cols-[1fr_120px_140px_100px_60px_60px] gap-3 px-8 py-2.5 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
+                <div x-show="windowWidth >= 768" class="grid grid-cols-[1fr_120px_140px_100px_60px_60px] gap-3 px-8 py-2.5 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
                     <span class="text-paper truncate flex items-center gap-3">
                         <span class="glyph text-base leading-none">▢</span>
-                        <span class="font-mono text-[12px]" x-text="dir.name"></span>
+                        <a href="#" @click.prevent="navigate(dir.path)" class="text-copper hover:underline">
+                            <span class="font-mono text-[12px]" x-text="dir.name"></span>
+                        </a>
                     </span>
                     <span class="text-paper-dim font-mono text-[11px]">—</span>
                     <span class="text-paper-dim font-mono text-[10px] tracking-wide" x-text="dir.modified"></span>
@@ -109,11 +111,13 @@
                     </span>
                 </div>
                 <!-- Mobile Card -->
-                <div class="md:hidden grid grid-cols-1 gap-0 px-5 py-4 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
+                <div x-show="windowWidth < 768" class="grid grid-cols-1 gap-0 px-5 py-4 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
                     <div class="flex items-center justify-between gap-3 mb-2">
                         <div class="flex items-center gap-3">
                             <span class="glyph text-base leading-none text-copper">▢</span>
-                            <span class="font-mono text-[13px] text-paper truncate" x-text="dir.name"></span>
+                            <a href="#" @click.prevent="navigate(dir.path)" class="text-copper hover:underline">
+                                <span class="font-mono text-[13px] text-paper truncate" x-text="dir.name"></span>
+                            </a>
                         </div>
                         <button @click.stop="deleteItem(dir)" class="font-serif italic text-base leading-none text-paper-dim hover:text-[color:var(--rust)] transition-colors">✕</button>
                     </div>
@@ -134,7 +138,7 @@
                  @dblclick="openFile(file)"
                  :class="selectedItem === file.path ? 'bg-ink-soft' : 'hover:bg-ink-soft'">
                 <!-- Desktop Row -->
-                <div class="hidden md:grid grid-cols-[1fr_120px_140px_100px_60px_60px] gap-3 px-8 py-2.5 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
+                <div x-show="windowWidth >= 768" class="grid grid-cols-[1fr_120px_140px_100px_60px_60px] gap-3 px-8 py-2.5 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
                     <span class="text-paper-soft truncate flex items-center gap-3">
                         <span class="font-serif italic text-paper-dim text-sm leading-none w-4">▤</span>
                         <span class="font-mono text-[12px]" x-text="file.name"></span>
@@ -148,7 +152,7 @@
                     </span>
                 </div>
                 <!-- Mobile Card -->
-                <div class="md:hidden grid grid-cols-1 gap-0 px-5 py-4 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
+                <div x-show="windowWidth < 768" class="grid grid-cols-1 gap-0 px-5 py-4 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
                     <div class="flex items-center justify-between gap-3 mb-2">
                         <div class="flex items-center gap-3">
                             <span class="font-serif italic text-paper-dim text-sm leading-none w-4">▤</span>
@@ -328,11 +332,17 @@ function fileApp(initialPath) {
         // Terminal state
         termInput: '', termCurrentCommand: '', termHistory: [], termCmdHistory: [], termHistoryIndex: -1,
         termCwd: '', termDisplay: '~', termRunning: false,
+        windowWidth: window.innerWidth,
         csrf: document.querySelector('meta[name="csrf-token"]')?.content || '',
 
         init() {
             this.loadFiles(initialPath);
             this.loadTerminalState();
+            window.addEventListener('resize', () => { this.windowWidth = window.innerWidth; });
+        },
+
+        isMobile() {
+            return window.innerWidth < 768;
         },
 
         async loadFiles(path) {
