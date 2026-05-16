@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
 use App\Services\FileService;
+use App\Services\ProjectService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response;
 
@@ -11,23 +12,59 @@ class FileController extends Controller
 {
     public function __construct(
         protected FileService $fileService,
+        protected ProjectService $projectService,
     ) {}
 
-    public function index(Request $request)
+public function index(Request $request)
     {
-        $path = $request->get('path', '/');
+        $activeProject = $this->projectService->getActiveProject();
 
         return view('panel.files', [
-            'initialPath' => $path,
+            'initialPath' => '/',
+            'activeProject' => $activeProject ? [
+                'name' => $activeProject['name'],
+                'displayName' => $activeProject['display_name'] ?? $activeProject['name'],
+                'path' => $activeProject['path'],
+            ] : null,
         ]);
     }
 
     public function listFiles(Request $request)
     {
         $path = $request->get('path', '/');
-        $result = $this->fileService->listDirectory($path);
+        
+        // Allow project override via query param to bypass session mismatch
+        $projectOverride = $request->get('project');
+        if ($projectOverride) {
+            $this->projectService->switchProject($projectOverride);
+        }
+        
+        $activeProject = $this->projectService->getActiveProject();
 
-        return response()->json($result);
+        $listing = $this->fileService->listDirectory($path);
+        $listing['activeProject'] = $activeProject ? [
+            'name' => $activeProject['name'],
+            'displayName' => $activeProject['display_name'] ?? $activeProject['name'],
+            'path' => $activeProject['path'],
+        ] : null;
+
+        return response()->json($listing);
+    }
+
+    public function getContext(Request $request)
+    {
+        $activeProject = $this->projectService->getActiveProject();
+        $basePath = base_path(config('panel.projects_dir', 'Project'));
+
+        return response()->json([
+            'activeProject' => $activeProject ? [
+                'name' => $activeProject['name'],
+                'displayName' => $activeProject['display_name'] ?? $activeProject['name'],
+                'path' => $activeProject['path'],
+            ] : null,
+            'basePath' => $basePath,
+            'projectsDir' => config('panel.projects_dir', 'Project'),
+        ]);
     }
 
     public function fileContent(Request $request)

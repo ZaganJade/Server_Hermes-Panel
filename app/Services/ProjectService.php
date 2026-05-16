@@ -127,6 +127,7 @@ class ProjectService
 
     /**
      * Get the currently active project.
+     * Normalizes 'name' to folder name for frontend context.
      */
     public function getActiveProject(): ?array
     {
@@ -136,7 +137,16 @@ class ProjectService
         }
 
         $projects = $this->getAllProjects();
-        return $projects[$activeName] ?? null;
+        $project = $projects[$activeName] ?? null;
+
+        if (!$project) {
+            return null;
+        }
+
+        // Normalize: use folder name as 'name' for frontend context
+        $project['name'] = $project['folder'] ?? $activeName;
+
+        return $project;
     }
 
     /**

@@ -99,8 +99,8 @@
     </div>
 
     <!-- Mobile Menu -->
-    <div x-show="mobileMenu" x-transition.opacity x-cloak class="md:hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-sm" @click="mobileMenu = false"></div>
-    <aside x-show="mobileMenu" x-transition x-cloak class="md:hidden fixed left-0 top-0 bottom-0 z-50 bg-ink-soft border-r border-[color:var(--rule)] w-[280px] flex flex-col overflow-y-auto">
+    <div x-show="mobileMenu" x-transition.opacity.duration-300 x-cloak class="md:hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-md" @click="mobileMenu = false"></div>
+    <aside x-show="mobileMenu" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="transform -translate-x-full" x-transition:enter-end="transform translate-0" x-transition:leave="transition ease-in duration-200" x-transition:leave-start="transform translate-0" x-transition:leave-end="transform -translate-x-full" x-cloak class="md:hidden fixed left-0 top-0 bottom-0 z-50 bg-ink-soft border-r border-[color:var(--rule)] w-[280px] flex flex-col overflow-y-auto">
         <div class="px-7 py-7 border-b border-[color:var(--rule)] flex items-center justify-between">
             <span class="font-serif italic text-2xl text-paper" style="font-variation-settings: 'opsz' 144, 'wght' 700, 'WONK' 1;">Hermes</span>
             <button @click="mobileMenu = false" class="text-paper-dim hover:text-paper"><i class="fas fa-xmark"></i></button>
@@ -149,7 +149,7 @@
         </header>
 
         <!-- Content -->
-        <div class="flex-1 px-8 py-10 @yield('content-class', '')">
+        <div class="flex-1 px-4 md:px-8 py-6 md:py-10 @yield('content-class', '')">
             @yield('content')
         </div>
 

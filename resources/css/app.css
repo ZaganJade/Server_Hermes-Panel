@@ -450,3 +450,42 @@ html, body {
 ::-webkit-scrollbar-track { background: var(--ink); }
 ::-webkit-scrollbar-thumb { background: var(--rule-strong); border-radius: 0; }
 ::-webkit-scrollbar-thumb:hover { background: var(--copper-deep); }
+
+/* Mobile touch targets - minimum 44px */
+@media (max-width: 767px) {
+    .btn-mini {
+        min-height: 44px;
+        min-width: 44px;
+        padding: 10px 14px;
+    }
+    
+    .tab-editorial {
+        min-height: 44px;
+        padding: 12px 16px;
+    }
+    
+    .input-editorial, .select-editorial, .textarea-editorial {
+        min-height: 44px;
+        font-size: 16px; /* Prevent iOS zoom on focus */
+    }
+}
+
+/* Responsive file cards on mobile */
+@media (max-width: 767px) {
+    .file-list-mobile {
+        display: block;
+    }
+    
+    .file-list-desktop {
+        display: none;
+    }
+}
+
+/* Table sticky column for mobile scroll */
+@media (max-width: 767px) {
+    .sticky-left {
+        position: sticky;
+        left: 0;
+        z-index: 10;
+    }
+}
