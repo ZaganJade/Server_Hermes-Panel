@@ -68,10 +68,10 @@
             <span class="font-serif italic text-paper-soft">Memuat tabel</span> ...
         </div>
         <div x-show="!loadingTables" class="border border-[color:var(--rule)] overflow-x-auto">
-            <table class="table-editorial">
+            <table class="table-editorial min-w-[600px]">
                 <thead>
                     <tr>
-                        <th>Nama Tabel</th>
+                        <th class="sticky left-0 bg-ink z-10">Nama Tabel</th>
                         <th>Baris</th>
                         <th>Ukuran</th>
                         <th>Engine</th>
@@ -81,7 +81,7 @@
                 <tbody>
                     <template x-for="(table, i) in tables" :key="table.name">
                         <tr @click="selectedTable = table.name; activeTab = 'browse'; loadTableData()" class="cursor-pointer">
-                            <td>
+                            <td class="sticky left-0 bg-ink">
                                 <span class="font-mono text-[9px] text-paper-dim tracking-wider mr-3" x-text="`N°${String(i+1).padStart(3,'0')}`"></span>
                                 <span class="text-paper" x-text="table.name"></span>
                             </td>
@@ -113,17 +113,17 @@
                     <span class="font-serif text-2xl italic text-copper" style="font-variation-settings: 'opsz' 60, 'wght' 400, 'WONK' 1;" x-text="selectedTable"></span>
                 </div>
                 <div class="flex gap-2">
-                    <button @click="exportTable(selectedTable, 'json')" class="btn-mini">Export JSON ↗</button>
-                    <button @click="exportTable(selectedTable, 'csv')" class="btn-mini">Export CSV ↗</button>
+                    <button @click="exportTable(selectedTable, 'json')" class="btn-mini px-4 py-2.5">Export JSON ↗</button>
+                    <button @click="exportTable(selectedTable, 'csv')" class="btn-mini px-4 py-2.5">Export CSV ↗</button>
                 </div>
             </div>
 
             <div class="border border-[color:var(--rule)] overflow-x-auto">
-                <table class="table-editorial">
+                <table class="table-editorial min-w-[600px]">
                     <thead x-show="browseData.length > 0">
                         <tr>
-                            <template x-for="col in browseColumns" :key="col">
-                                <th class="cursor-pointer hover:text-copper transition-colors" @click="sortByColumn(col)">
+                            <template x-for="(col, ci) in browseColumns" :key="col">
+                                <th class="cursor-pointer hover:text-copper transition-colors" :class="ci === 0 ? 'sticky left-0 bg-ink z-10' : ''" @click="sortByColumn(col)">
                                     <span x-text="col"></span>
                                     <span x-show="browseSortBy === col" class="text-copper" x-text="browseSortDir === 'asc' ? '↑' : '↓'"></span>
                                 </th>
@@ -134,8 +134,8 @@
                     <tbody>
                         <template x-for="(row, ri) in browseData" :key="ri">
                             <tr>
-                                <template x-for="col in browseColumns" :key="col">
-                                    <td class="text-paper-soft text-[11px] max-w-[260px] truncate" :title="String(row[col])" x-text="String(row[col] ?? 'NULL')"></td>
+                                <template x-for="(col, ci) in browseColumns" :key="col">
+                                    <td class="text-paper-soft text-[11px] max-w-[260px] truncate" :class="ci === 0 ? 'sticky left-0 bg-ink' : ''" :title="String(row[col])" x-text="String(row[col] ?? 'NULL')"></td>
                                 </template>
                                 <td class="text-right">
                                     <button @click="deleteRow(selectedTable, row.id)" class="font-serif italic text-base leading-none text-paper-dim hover:text-[color:var(--rust)] transition-colors" title="Hapus baris">✕</button>
@@ -182,7 +182,7 @@
         <!-- Editor -->
         <label class="label-mono">Pernyataan SQL</label>
         <textarea x-model="query"
-                  rows="8"
+                  rows="4 md:rows-8"
                   class="textarea-editorial"
                   placeholder="SELECT * FROM users WHERE active = 1"></textarea>
 
@@ -203,19 +203,19 @@
                     <span class="font-mono text-[10px] tracking-[0.22em] uppercase text-paper-dim" x-text="`${queryResult.count} baris dikembalikan`"></span>
                 </div>
                 <div class="border border-[color:var(--rule)] overflow-x-auto">
-                    <table class="table-editorial">
+                    <table class="table-editorial min-w-[600px]">
                         <thead x-show="queryResult.data.length > 0">
                             <tr>
-                                <template x-for="(value, col) in queryResult.data[0]" :key="col">
-                                    <th x-text="col"></th>
+                                <template x-for="(value, col, ci) in queryResult.data[0]" :key="col">
+                                    <th x-text="col" :class="ci === 0 ? 'sticky left-0 bg-ink z-10' : ''"></th>
                                 </template>
                             </tr>
                         </thead>
                         <tbody>
                             <template x-for="(row, ri) in queryResult.data" :key="ri">
                                 <tr>
-                                    <template x-for="(value, col) in row" :key="col">
-                                        <td class="text-paper-soft text-[11px]" x-text="String(value ?? 'NULL')"></td>
+                                    <template x-for="(value, col, ci) in row" :key="col">
+                                        <td class="text-paper-soft text-[11px]" :class="ci === 0 ? 'sticky left-0 bg-ink' : ''" x-text="String(value ?? 'NULL')"></td>
                                     </template>
                                 </tr>
                             </template>
