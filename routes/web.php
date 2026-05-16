@@ -60,6 +60,7 @@ Route::prefix('panel')->name('panel.')->middleware('owner.access')->group(functi
 
     // AJAX: Files
     Route::get('/api/files', [FileController::class, 'listFiles'])->name('api.files');
+    Route::get('/api/files/context', [FileController::class, 'getContext'])->name('api.files-context');
     Route::post('/api/files/content', [FileController::class, 'fileContent'])->name('api.file-content');
     Route::post('/api/files/save', [FileController::class, 'saveFile'])->name('api.file-save');
     Route::post('/api/files/create', [FileController::class, 'createFile'])->name('api.file-create');

@@ -76,11 +76,19 @@ class FileService
         usort($directories, fn ($a, $b) => strcmp($a['name'], $b['name']));
         usort($files, fn ($a, $b) => strcmp($a['name'], $b['name']));
 
+        $activeProject = $this->projectService->getActiveProject();
+
         return [
             'directories' => $directories,
             'files' => $files,
             'currentPath' => $relativePath,
             'breadcrumbs' => $this->getBreadcrumbs($relativePath),
+            'basePath' => $this->getBasePath(),
+            'activeProject' => $activeProject ? [
+                'name' => $activeProject['name'],
+                'displayName' => $activeProject['display_name'] ?? $activeProject['name'],
+                'path' => $activeProject['path'],
+            ] : null,
         ];
     }
 

@@ -76,7 +76,7 @@
                 <span class="section-label">Keluaran</span>
                 <button @click="artisanOutput = ''" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-copper transition-colors">Bersihkan ↗</button>
             </div>
-            <pre class="bg-ink p-5 font-mono text-[11px] text-paper-soft whitespace-pre-wrap max-h-[480px] overflow-y-auto leading-relaxed" x-text="artisanOutput"></pre>
+            <pre class="bg-ink p-5 font-mono text-[11px] text-paper-soft whitespace-pre-wrap max-h-[320px] md:max-h-[480px] overflow-y-auto leading-relaxed" x-text="artisanOutput"></pre>
         </div>
     </div>
 
@@ -109,7 +109,7 @@
                 <span class="section-label">Catatan Laravel</span>
                 <span class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim" x-text="`${logs.length} baris`"></span>
             </div>
-            <div class="p-5 font-mono text-[11px] max-h-[560px] overflow-y-auto leading-relaxed">
+            <div class="p-5 font-mono text-[11px] max-h-[320px] md:max-h-[560px] overflow-y-auto leading-relaxed">
                 <template x-for="(line, i) in logs" :key="i">
                     <div class="py-0.5 border-b border-[color:var(--rule)] last:border-0"
                          :class="{
@@ -250,7 +250,7 @@
                 <span class="section-label">Keluaran</span>
                 <button @click="composerOutput = ''; npmOutput = ''" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-copper transition-colors">Bersihkan ↗</button>
             </div>
-            <pre class="bg-ink p-5 font-mono text-[11px] text-paper-soft whitespace-pre-wrap max-h-[480px] overflow-y-auto leading-relaxed" x-text="composerOutput || npmOutput"></pre>
+            <pre class="bg-ink p-5 font-mono text-[11px] text-paper-soft whitespace-pre-wrap max-h-[320px] md:max-h-[480px] overflow-y-auto leading-relaxed" x-text="composerOutput || npmOutput"></pre>
         </div>
     </div>
 

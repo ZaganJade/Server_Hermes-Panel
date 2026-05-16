@@ -6,6 +6,7 @@
 @section('content-class', '!p-0')
 
 @section('content')
+<?php $pageActiveProject = $activeProject ?? null; ?>
 <div x-data="fileApp('{{ $initialPath }}')" class="min-h-[calc(100vh-180px)] flex flex-col">
 
     <!-- Editorial Header -->
@@ -92,19 +93,38 @@
         <template x-for="dir in directories" :key="dir.path">
             <div @click="selectedItem = dir.path"
                  @dblclick="navigate(dir.path)"
-                 class="grid grid-cols-[1fr_120px_140px_100px_60px_60px] gap-3 px-8 py-2.5 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]"
                  :class="selectedItem === dir.path ? 'bg-ink-soft' : 'hover:bg-ink-soft'">
-                <span class="text-paper truncate flex items-center gap-3">
-                    <span class="glyph text-base leading-none">▢</span>
-                    <span class="font-mono text-[12px]" x-text="dir.name"></span>
-                </span>
-                <span class="text-paper-dim font-mono text-[11px]">—</span>
-                <span class="text-paper-dim font-mono text-[10px] tracking-wide" x-text="dir.modified"></span>
-                <span class="text-paper-dim font-mono text-[10px]" x-text="dir.permissions"></span>
-                <span class="text-paper-dim font-mono text-[9px] tracking-[0.22em] uppercase text-right">DIR</span>
-                <span class="text-right">
-                    <button @click.stop="deleteItem(dir)" class="font-serif italic text-base leading-none text-paper-dim hover:text-[color:var(--rust)] transition-colors">✕</button>
-                </span>
+                <!-- Desktop Row -->
+                <div class="hidden md:grid grid-cols-[1fr_120px_140px_100px_60px_60px] gap-3 px-8 py-2.5 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
+                    <span class="text-paper truncate flex items-center gap-3">
+                        <span class="glyph text-base leading-none">▢</span>
+                        <span class="font-mono text-[12px]" x-text="dir.name"></span>
+                    </span>
+                    <span class="text-paper-dim font-mono text-[11px]">—</span>
+                    <span class="text-paper-dim font-mono text-[10px] tracking-wide" x-text="dir.modified"></span>
+                    <span class="text-paper-dim font-mono text-[10px]" x-text="dir.permissions"></span>
+                    <span class="text-paper-dim font-mono text-[9px] tracking-[0.22em] uppercase text-right">DIR</span>
+                    <span class="text-right">
+                        <button @click.stop="deleteItem(dir)" class="font-serif italic text-base leading-none text-paper-dim hover:text-[color:var(--rust)] transition-colors">✕</button>
+                    </span>
+                </div>
+                <!-- Mobile Card -->
+                <div class="md:hidden grid grid-cols-1 gap-0 px-5 py-4 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
+                    <div class="flex items-center justify-between gap-3 mb-2">
+                        <div class="flex items-center gap-3">
+                            <span class="glyph text-base leading-none text-copper">▢</span>
+                            <span class="font-mono text-[13px] text-paper truncate" x-text="dir.name"></span>
+                        </div>
+                        <button @click.stop="deleteItem(dir)" class="font-serif italic text-base leading-none text-paper-dim hover:text-[color:var(--rust)] transition-colors">✕</button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-1 pl-7">
+                        <div class="text-paper-dim font-mono text-[10px] tracking-wide" x-text="dir.modified"></div>
+                        <div class="text-paper-dim font-mono text-[10px] text-right" x-text="dir.permissions"></div>
+                        <div class="col-span-2 mt-1">
+                            <span class="text-copper font-mono text-[9px] tracking-[0.22em] uppercase">DIR</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </template>
 
@@ -112,19 +132,39 @@
         <template x-for="file in files" :key="file.path">
             <div @click="selectedItem = file.path"
                  @dblclick="openFile(file)"
-                 class="grid grid-cols-[1fr_120px_140px_100px_60px_60px] gap-3 px-8 py-2.5 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]"
                  :class="selectedItem === file.path ? 'bg-ink-soft' : 'hover:bg-ink-soft'">
-                <span class="text-paper-soft truncate flex items-center gap-3">
-                    <span class="font-serif italic text-paper-dim text-sm leading-none w-4">▤</span>
-                    <span class="font-mono text-[12px]" x-text="file.name"></span>
-                </span>
-                <span class="text-paper-dim font-mono text-[10px]" x-text="file.size"></span>
-                <span class="text-paper-dim font-mono text-[10px] tracking-wide" x-text="file.modified"></span>
-                <span class="text-paper-dim font-mono text-[10px]" x-text="file.permissions"></span>
-                <span class="text-paper-dim font-mono text-[9px] tracking-[0.22em] uppercase text-right" x-text="file.extension || '—'"></span>
-                <span class="text-right">
-                    <button @click.stop="deleteItem(file)" class="font-serif italic text-base leading-none text-paper-dim hover:text-[color:var(--rust)] transition-colors">✕</button>
-                </span>
+                <!-- Desktop Row -->
+                <div class="hidden md:grid grid-cols-[1fr_120px_140px_100px_60px_60px] gap-3 px-8 py-2.5 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
+                    <span class="text-paper-soft truncate flex items-center gap-3">
+                        <span class="font-serif italic text-paper-dim text-sm leading-none w-4">▤</span>
+                        <span class="font-mono text-[12px]" x-text="file.name"></span>
+                    </span>
+                    <span class="text-paper-dim font-mono text-[10px]" x-text="file.size"></span>
+                    <span class="text-paper-dim font-mono text-[10px] tracking-wide" x-text="file.modified"></span>
+                    <span class="text-paper-dim font-mono text-[10px]" x-text="file.permissions"></span>
+                    <span class="text-paper-dim font-mono text-[9px] tracking-[0.22em] uppercase text-right" x-text="file.extension || '—'"></span>
+                    <span class="text-right">
+                        <button @click.stop="deleteItem(file)" class="font-serif italic text-base leading-none text-paper-dim hover:text-[color:var(--rust)] transition-colors">✕</button>
+                    </span>
+                </div>
+                <!-- Mobile Card -->
+                <div class="md:hidden grid grid-cols-1 gap-0 px-5 py-4 cursor-pointer transition-colors text-sm border-b border-[color:var(--rule)]">
+                    <div class="flex items-center justify-between gap-3 mb-2">
+                        <div class="flex items-center gap-3">
+                            <span class="font-serif italic text-paper-dim text-sm leading-none w-4">▤</span>
+                            <span class="font-mono text-[13px] text-paper-soft truncate" x-text="file.name"></span>
+                        </div>
+                        <button @click.stop="deleteItem(file)" class="font-serif italic text-base leading-none text-paper-dim hover:text-[color:var(--rust)] transition-colors">✕</button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-x-4 gap-y-1 pl-7">
+                        <div class="text-paper-dim font-mono text-[10px]" x-text="file.size"></div>
+                        <div class="text-paper-dim font-mono text-[10px] tracking-wide" x-text="file.modified"></div>
+                        <div class="text-paper-dim font-mono text-[10px] text-right" x-text="file.permissions"></div>
+                    </div>
+                    <div class="mt-1 pl-7">
+                        <span class="text-rust font-mono text-[9px] tracking-[0.22em] uppercase" x-text="file.extension || '—'"></span>
+                    </div>
+                </div>
             </div>
         </template>
     </div>
@@ -275,6 +315,9 @@
 
 @push('scripts')
 <script>
+var pageActiveProject = <?php echo $pageActiveProject ? json_encode($pageActiveProject) : 'null'; ?>;
+console.log('[files] pageActiveProject:', pageActiveProject);
+
 function fileApp(initialPath) {
     return {
         currentPath: initialPath, directories: [], files: [], breadcrumbs: [],
@@ -295,7 +338,10 @@ function fileApp(initialPath) {
         async loadFiles(path) {
             this.loading = true; this.currentPath = path;
             try {
-                const res = await fetch(`{{ route('panel.api.files') }}?path=${encodeURIComponent(path)}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                const projectParam = (typeof pageActiveProject !== 'undefined' && pageActiveProject?.name)
+                    ? `&project=${encodeURIComponent(pageActiveProject.name)}` : '';
+                const url = `{{ route('panel.api.files') }}?path=${encodeURIComponent(path)}${projectParam}`;
+                const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
                 const data = await res.json();
                 this.directories = data.directories || [];
                 this.files = data.files || [];
