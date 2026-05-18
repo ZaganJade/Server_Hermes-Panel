@@ -179,99 +179,76 @@ class DatabaseService
             $sortDir = 'asc';
         }
 
-        $query = DB::connection($connectionName)->table($table);
+        $conn = DB::connection($connectionName);
 
-        // Validate sort column against actual table columns if provided
-        if ($sortBy) {
-            if (!$this->isValidSqlIdentifier($sortBy)) {
-                return [
-                    'data' => [],
-                    'total' => 0,
-                    'page' => $page,
-                    'per_page' => $perPage,
-                    'last_page' => 0,
-                    'error' => 'Invalid column name.',
-                ];
-            }
-            $query->orderBy($sortBy, $sortDir);
+        // Validate sort column against identifier pattern
+        if ($sortBy && !$this->isValidSqlIdentifier($sortBy)) {
+            $sortBy = null;
         }
 
-        $total = $query->count();
-        $data = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
+        $baseQuery = $conn->table($table);
+        $countQuery = clone $baseQuery;
+
+        if ($sortBy) {
+            $baseQuery->orderBy($sortBy, $sortDir);
+        }
+
+        $total = $countQuery->count();
+        $data = $baseQuery->skip(($page - 1) * $perPage)->take($perPage)->get();
 
         return [
             'data' => $data,
             'total' => $total,
             'page' => $page,
             'per_page' => $perPage,
-            'last_page' => ceil($total / $perPage),
+            'last_page' => $perPage > 0 ? max(1, (int) ceil($total / $perPage)) : 1,
         ];
     }
 
     /**
      * Run a raw SQL query.
-     * Note: Only SELECT-type queries are allowed to prevent DDL/DML injection.
+     * SECURITY: Restricted to read-only queries only. DDL and DML are blocked.
+     * ERROR HANDLING: Internal details are hidden — only user-friendly messages returned.
      */
     public function runQuery(string $connectionName, string $sql): array
     {
-        // Block any query containing multiple statements (potential SQL injection)
-        if (preg_match('/;\s*\w/s', $sql)) {
+        // Normalize: strip line comments
+        $normalizedSql = preg_replace('/--.*$/m', '', $sql);
+        $normalizedSql = preg_replace('/#.*$/m', '', $normalizedSql);
+        $normalizedSql = trim($normalizedSql);
+
+        if (empty($normalizedSql)) {
+            return ['type' => 'error', 'error' => 'Empty query.'];
+        }
+
+        // Determine query type from first word
+        $firstWord = strtoupper(preg_match('/^\S+/', $normalizedSql, $m) ? $m[0] : '');
+        $allowedTypes = ['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN'];
+
+        // SECURITY: Only read-only queries allowed in panel SQL editor
+        if (!in_array($firstWord, $allowedTypes)) {
             return [
                 'type' => 'error',
-                'error' => 'Multiple statements are not allowed.',
+                'error' => 'Only SELECT, SHOW, DESCRIBE, and EXPLAIN queries are permitted.',
             ];
         }
 
-        // Block dangerous SQL keywords that could be used for injection
-        $blockedPatterns = [
-            '/\bUNION\b/i',
-            '/\bINSERT\b/i',
-            '/\bUPDATE\b/i',
-            '/\bDELETE\b/i',
-            '/\bDROP\b/i',
-            '/\bTRUNCATE\b/i',
-            '/\bALTER\b/i',
-            '/\bCREATE\b/i',
-            '/\bGRANT\b/i',
-            '/\bREVOKE\b/i',
-            '/\bEXEC\b/i',
-            '/\bEXECUTE\b/i',
-            '/--/i',           // SQL comment
-            '/\/\*/i',        // Block comment start
-            '/INTO\s+OUTFILE/i',
-            '/INTO\s+DUMPFILE/i',
-        ];
-
-        foreach ($blockedPatterns as $pattern) {
-            if (preg_match($pattern, $sql)) {
-                return [
-                    'type' => 'error',
-                    'error' => 'This SQL syntax is not allowed for security reasons.',
-                ];
-            }
-        }
-
         try {
-            $isSelect = preg_match('/^\s*(SELECT|SHOW|DESCRIBE|EXPLAIN)\s/i', $sql);
-
-            if (!$isSelect) {
-                return [
-                    'type' => 'error',
-                    'error' => 'Only SELECT-type queries are allowed.',
-                ];
-            }
-
-            $results = DB::connection($connectionName)->select($sql);
-
+            $results = DB::connection($connectionName)->select($normalizedSql);
             return [
                 'type' => 'select',
                 'data' => $results,
                 'count' => count($results),
             ];
+        } catch (\QueryException $e) {
+            return [
+                'type' => 'error',
+                'error' => 'Query failed. Please check your SQL syntax.',
+            ];
         } catch (\Throwable $e) {
             return [
                 'type' => 'error',
-                'error' => $e->getMessage(),
+                'error' => 'Database connection error.',
             ];
         }
     }

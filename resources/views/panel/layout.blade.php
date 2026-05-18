@@ -88,12 +88,12 @@
     </aside>
 
     <!-- Mobile Header -->
-    <div class="md:hidden fixed top-0 left-0 right-0 z-50 bg-ink-soft border-b border-[color:var(--rule)] px-5 py-4 flex items-center justify-between">
+    <div class="md:hidden fixed top-0 left-0 right-0 z-50 bg-ink-soft/95 backdrop-blur border-b border-[color:var(--rule)] px-5 py-4 flex items-center justify-between" style="padding-top: max(1rem, env(safe-area-inset-top)); min-height: 60px;">
         <div class="flex items-center gap-3">
-            <button @click="mobileMenu = !mobileMenu" class="text-paper-soft hover:text-copper transition">
-                <i class="fas fa-bars text-base"></i>
+            <button @click="mobileMenu = !mobileMenu" class="text-paper-soft hover:text-copper transition min-w-[44px] min-h-[44px] flex items-center justify-center -ml-2" aria-label="Menu">
+                <i class="fas fa-bars text-lg"></i>
             </button>
-            <span class="font-serif italic text-xl text-paper" style="font-variation-settings: 'opsz' 144, 'wght' 700, 'WONK' 1;">Hermes</span>
+            <a href="{{ route('landing') }}" class="font-serif italic text-xl text-paper leading-none" style="font-variation-settings: 'opsz' 144, 'wght' 700, 'WONK' 1;">Hermes</a>
         </div>
         <span class="font-mono text-[9px] tracking-[0.22em] uppercase text-copper">@yield('title', 'Panel')</span>
     </div>
@@ -133,7 +133,7 @@
     </aside>
 
     <!-- Main -->
-    <main class="md:ml-[280px] mt-[60px] md:mt-0 min-h-screen flex flex-col">
+    <main class="md:ml-[280px] mt-[60px] md:mt-0 min-h-screen flex flex-col pb-24 md:pb-10">
         <!-- Header -->
         <header class="sticky top-0 z-20 bg-ink/90 backdrop-blur border-b border-[color:var(--rule)] px-8 py-5 flex items-center justify-between">
             <div class="flex items-center gap-4">
@@ -154,11 +154,34 @@
         </div>
 
         <!-- Footer Strip -->
-        <footer class="border-t border-[color:var(--rule)] px-8 py-5 flex items-center justify-between font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim">
+        <footer class="hidden md:flex border-t border-[color:var(--rule)] px-8 py-5 flex items-center justify-between font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim">
             <span>Hermes <span class="text-copper">/</span> ©{{ date('Y') }}</span>
             <span>Build {{ str_pad('001', 3, '0', STR_PAD_LEFT) }} · Laravel {{ app()->version() }}</span>
         </footer>
     </main>
+
+    <!-- Mobile Bottom Nav -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-ink-soft border-t border-[color:var(--rule)] pb-safe" style="padding-bottom: max(1rem, env(safe-area-inset-bottom));">
+        <div class="flex items-center justify-around h-16">
+            @foreach ([
+                'dashboard' => ['α', 'Dashboard', route('panel.dashboard')],
+                'database'  => ['β', 'Data',     route('panel.database')],
+                'files'     => ['γ', 'Berkas',  route('panel.files')],
+                'tools'     => ['δ', 'Tools',    route('panel.tools')],
+                'projects'  => ['ε', 'Proyek',   route('panel.projects')],
+            ] as $route => [$glyph, $label, $url])
+            @php $active = request()->routeIs("panel.$route"); @endphp
+            <a href="{{ $url }}"
+               class="flex flex-col items-center justify-center gap-1.5 px-4 py-2 min-w-[64px] transition-colors {{ $active ? 'text-copper' : 'text-paper-soft hover:text-paper' }}">
+                <span class="glyph text-xl leading-none">{{ $glyph }}</span>
+                <span class="font-mono text-[9px] tracking-[0.15em] uppercase">{{ $label }}</span>
+                @if($active)
+                <span class="absolute bottom-1 w-1 h-1 rounded-full bg-copper"></span>
+                @endif
+            </a>
+            @endforeach
+        </div>
+    </nav>
 
     <!-- Toasts -->
     <div x-data="{ toasts: [], add(message, type = 'success') {
@@ -167,7 +190,7 @@
         setTimeout(() => this.toasts = this.toasts.filter(t => t.id !== id), 3500);
     }}"
          x-init="window.showToast = (msg, type) => add(msg, type)"
-         class="fixed bottom-8 right-8 z-50 space-y-3">
+         class="fixed bottom-24 md:bottom-8 right-4 md:right-8 z-50 space-y-3">
         <template x-for="toast in toasts" :key="toast.id">
             <div x-transition.opacity
                  class="toast"

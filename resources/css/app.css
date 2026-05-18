@@ -458,16 +458,64 @@ html, body {
         min-width: 44px;
         padding: 10px 14px;
     }
-    
+
     .tab-editorial {
         min-height: 44px;
         padding: 12px 16px;
     }
-    
+
     .input-editorial, .select-editorial, .textarea-editorial {
         min-height: 44px;
         font-size: 16px; /* Prevent iOS zoom on focus */
     }
+}
+
+/* Safe-area padding for mobile devices (iPhone notch, Android nav) */
+@supports (padding: max(env(safe-area-inset-top))) {
+    .safe-area-top { padding-top: max(env(safe-area-inset-top), 16px); }
+    .safe-area-bottom { padding-bottom: max(env(safe-area-inset-bottom), 16px); }
+    .safe-area-left { padding-left: max(env(safe-area-inset-left), 16px); }
+    .safe-area-right { padding-right: max(env(safe-area-inset-right), 16px); }
+
+    .safe-area-header { padding-top: max(env(safe-area-inset-top), 16px); }
+    .safe-area-footer { padding-bottom: max(env(safe-area-inset-bottom), 16px); }
+}
+
+/* Mobile touch-friendly table */
+@media (max-width: 767px) {
+    .table-editorial {
+        font-size: 14px;
+    }
+    .table-editorial th,
+    .table-editorial td {
+        padding: 12px 10px;
+        min-height: 44px;
+    }
+    .table-editorial tbody tr {
+        min-height: 48px;
+    }
+    /* Horizontal scroll with snap for tables */
+    .table-scroll-snap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x mandatory;
+    }
+    .table-scroll-snap > * {
+        scroll-snap-align: start;
+    }
+}
+
+/* Safe area utilities for iOS */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+    .pt-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
+    .safe-bottom-fixed { bottom: max(1rem, env(safe-area-inset-bottom)); }
+}
+
+@supports not (padding-bottom: env(safe-area-inset-bottom)) {
+    .pb-safe { padding-bottom: 1rem; }
+    .pt-safe { padding-top: 1rem; }
+    .safe-bottom-fixed { bottom: 1rem; }
 }
 
 
