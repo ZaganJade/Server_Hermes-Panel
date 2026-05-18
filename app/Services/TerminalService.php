@@ -41,7 +41,7 @@ class TerminalService
 
     /**
      * Execute a command. Handles `cd` specially (mutates session cwd).
-     * All other commands run via Symfony Process in current cwd.
+     * All other commands run via Symfony Process with security restrictions.
      */
     public function execute(string $command): array
     {
@@ -94,16 +94,42 @@ class TerminalService
             ];
         }
 
-        // Run via Process
+        // Block command chaining operators to prevent command injection
+        // Only allow single commands (no semicolons, pipes, &&, ||, &, $, backticks, etc.)
+        if ($this->containsCommandChaining($command)) {
+            return [
+                'output' => '',
+                'error' => "[hermes] Command chaining (;, &&, ||, |, &) tidak diizinkan untuk keamanan.\n",
+                'cwd' => $this->getCwd(),
+                'exit_code' => 1,
+            ];
+        }
+
+        // Block dangerous shell patterns
+        if ($this->containsDangerousPatterns($command)) {
+            return [
+                'output' => '',
+                'error' => "[hermes] Pola perintah berbahaya tidak diizinkan.\n",
+                'cwd' => $this->getCwd(),
+                'exit_code' => 1,
+            ];
+        }
+
+        // Run via Process with individual arguments (not shell command)
         try {
             $cwd = $this->getCwd();
+            $args = $this->parseCommandToArgs($command);
 
-            // Use shell wrapper to support pipes, redirects, env expansion
-            $isWindows = strncasecmp(PHP_OS, 'WIN', 3) === 0;
-            $process = $isWindows
-                ? Process::fromShellCommandline($command, $cwd)
-                : new Process(['/bin/sh', '-c', $command], $cwd);
+            if (empty($args)) {
+                return [
+                    'output' => '',
+                    'error' => '',
+                    'cwd' => $cwd,
+                    'exit_code' => 0,
+                ];
+            }
 
+            $process = new Process($args, $cwd);
             $process->setTimeout(60);
             $process->setEnv(['TERM' => 'dumb', 'NO_COLOR' => '1']);
             $process->run();
@@ -122,6 +148,101 @@ class TerminalService
                 'exit_code' => 1,
             ];
         }
+    }
+
+    /**
+     * Check if command contains command chaining operators.
+     */
+    protected function containsCommandChaining(string $command): bool
+    {
+        // Block: ; && || | & $() `` < > >> << and newlines in unexpected places
+        $blockedPatterns = [
+            '/[;\&\|]{2,}/',      // &&, ||, ;;
+            '/[;\&\|]\s*[\&\|]/', // ;& ;| &| etc
+            '/\$\(/',            // Command substitution $
+            '/`[^`]+`/',          // Backtick command substitution
+            '/\\\n/',            // Line continuation
+            '/>/',                // Output redirect
+            '/<\s*\//',          // Input redirect
+        ];
+
+        foreach ($blockedPatterns as $pattern) {
+            if (preg_match($pattern, $command)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check for dangerous shell patterns.
+     */
+    protected function containsDangerousPatterns(string $command): bool
+    {
+        // Block dangerous commands that could be used for injection
+        $blockedCommands = [
+            '/\brm\s+-[rf]+\b/i',
+            '/\bdel\s+\/[fqs]/i',
+            '/\bmkfs\b/i',
+            '/\bdd\s+/i',
+            '/\bcat\s+/i',
+            '/\bnc\s+/i',
+            '/\bwget\s+/i',
+            '/\bcurl\s+/i',
+            '/\bnohup\s+/i',
+            '/\beval\b/i',
+            '/\bsource\b/i',
+        ];
+
+        foreach ($blockedCommands as $pattern) {
+            if (preg_match($pattern, $command)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Parse command string into individual arguments safely.
+     * Uses shlex-style parsing to handle quoted arguments.
+     */
+    protected function parseCommandToArgs(string $command): array
+    {
+        $args = [];
+        $current = '';
+        $inQuote = false;
+        $quoteChar = '';
+        $length = strlen($command);
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $command[$i];
+
+            if ($inQuote) {
+                if ($char === $quoteChar) {
+                    $inQuote = false;
+                } else {
+                    $current .= $char;
+                }
+            } elseif ($char === '"' || $char === "'") {
+                $inQuote = true;
+                $quoteChar = $char;
+            } elseif ($char === ' ' || $char === '\t' || $char === '\n' || $char === '\r') {
+                if ($current !== '') {
+                    $args[] = $current;
+                    $current = '';
+                }
+            } else {
+                $current .= $char;
+            }
+        }
+
+        if ($current !== '') {
+            $args[] = $current;
+        }
+
+        return $args;
     }
 
     /**
