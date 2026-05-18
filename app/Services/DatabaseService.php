@@ -148,13 +148,51 @@ class DatabaseService
     }
 
     /**
+     * Validate a SQL identifier (table name or column name).
+     * Only allows alphanumeric characters and underscores.
+     */
+    protected function isValidSqlIdentifier(string $identifier): bool
+    {
+        return preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $identifier) === 1;
+    }
+
+    /**
      * Get table data with pagination and sorting.
      */
     public function getTableData(string $connectionName, string $table, int $page = 1, int $perPage = 25, string $sortBy = null, string $sortDir = 'asc'): array
     {
+        // Validate table name to prevent SQL injection
+        if (!$this->isValidSqlIdentifier($table)) {
+            return [
+                'data' => [],
+                'total' => 0,
+                'page' => $page,
+                'per_page' => $perPage,
+                'last_page' => 0,
+                'error' => 'Invalid table name.',
+            ];
+        }
+
+        // Validate sort direction
+        $sortDir = strtolower($sortDir);
+        if (!in_array($sortDir, ['asc', 'desc'], true)) {
+            $sortDir = 'asc';
+        }
+
         $query = DB::connection($connectionName)->table($table);
 
+        // Validate sort column against actual table columns if provided
         if ($sortBy) {
+            if (!$this->isValidSqlIdentifier($sortBy)) {
+                return [
+                    'data' => [],
+                    'total' => 0,
+                    'page' => $page,
+                    'per_page' => $perPage,
+                    'last_page' => 0,
+                    'error' => 'Invalid column name.',
+                ];
+            }
             $query->orderBy($sortBy, $sortDir);
         }
 
@@ -172,30 +210,63 @@ class DatabaseService
 
     /**
      * Run a raw SQL query.
+     * Note: Only SELECT-type queries are allowed to prevent DDL/DML injection.
      */
     public function runQuery(string $connectionName, string $sql): array
     {
-        try {
-            $isSelect = preg_match('/^\s*(SELECT|SHOW|DESCRIBE|EXPLAIN)/i', $sql);
-            $isDdl = preg_match('/^\s*(CREATE|ALTER|DROP|TRUNCATE|RENAME)/i', $sql);
+        // Block any query containing multiple statements (potential SQL injection)
+        if (preg_match('/;\s*\w/s', $sql)) {
+            return [
+                'type' => 'error',
+                'error' => 'Multiple statements are not allowed.',
+            ];
+        }
 
-            if ($isSelect) {
-                $results = DB::connection($connectionName)->select($sql);
+        // Block dangerous SQL keywords that could be used for injection
+        $blockedPatterns = [
+            '/\bUNION\b/i',
+            '/\bINSERT\b/i',
+            '/\bUPDATE\b/i',
+            '/\bDELETE\b/i',
+            '/\bDROP\b/i',
+            '/\bTRUNCATE\b/i',
+            '/\bALTER\b/i',
+            '/\bCREATE\b/i',
+            '/\bGRANT\b/i',
+            '/\bREVOKE\b/i',
+            '/\bEXEC\b/i',
+            '/\bEXECUTE\b/i',
+            '/--/i',           // SQL comment
+            '/\/\*/i',        // Block comment start
+            '/INTO\s+OUTFILE/i',
+            '/INTO\s+DUMPFILE/i',
+        ];
+
+        foreach ($blockedPatterns as $pattern) {
+            if (preg_match($pattern, $sql)) {
                 return [
-                    'type' => 'select',
-                    'data' => $results,
-                    'count' => count($results),
+                    'type' => 'error',
+                    'error' => 'This SQL syntax is not allowed for security reasons.',
+                ];
+            }
+        }
+
+        try {
+            $isSelect = preg_match('/^\s*(SELECT|SHOW|DESCRIBE|EXPLAIN)\s/i', $sql);
+
+            if (!$isSelect) {
+                return [
+                    'type' => 'error',
+                    'error' => 'Only SELECT-type queries are allowed.',
                 ];
             }
 
-            $affected = DB::connection($connectionName)->affectingStatement($sql);
+            $results = DB::connection($connectionName)->select($sql);
 
             return [
-                'type' => $isDdl ? 'ddl' : 'modify',
-                'affected' => $affected,
-                'message' => $isDdl
-                    ? 'Query executed successfully.'
-                    : "{$affected} row(s) affected.",
+                'type' => 'select',
+                'data' => $results,
+                'count' => count($results),
             ];
         } catch (\Throwable $e) {
             return [

@@ -284,7 +284,7 @@ class ProjectService
     }
 
     /**
-     * Read project's .env file.
+     * Read project's .env file and mask sensitive credentials.
      */
     public function readEnv(string $projectPath): array
     {
@@ -297,6 +297,41 @@ class ProjectService
 
         $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
+        // Keys that contain sensitive credentials and should be masked
+        $sensitiveKeys = [
+            'DB_PASSWORD',
+            'DB_PASSWORD_SECONDARY',
+            'DB_PASSWORD_*',
+            'MAIL_MAILER',
+            'MAIL_HOST',
+            'MAIL_PORT',
+            'MAIL_USERNAME',
+            'MAIL_PASSWORD',
+            'MAIL_FROM_ADDRESS',
+            'MAIL_FROM_NAME',
+            'REDIS_PASSWORD',
+            'MEMCACHED_PASSWORD',
+            'AWS_ACCESS_KEY_ID',
+            'AWS_SECRET_ACCESS_KEY',
+            'AWS_DEFAULT_REGION',
+            'STRIPE_KEY',
+            'STRIPE_SECRET',
+            'PAYPAL_CLIENT_ID',
+            'PAYPAL_SECRET',
+            'SENDGRID_API_KEY',
+            'MAILGUN_API_KEY',
+            'JWT_SECRET',
+            'APP_KEY',
+            'AUTH_SECRET',
+            'SESSION_DRIVER',
+            'SESSION_LIFETIME',
+            'CACHE_DRIVER',
+            'QUEUE_CONNECTION',
+            'LOG_CHANNEL',
+            'LOG_LEVEL',
+            'BROADCAST_DRIVER',
+        ];
+
         foreach ($lines as $line) {
             $line = trim($line);
 
@@ -305,7 +340,31 @@ class ProjectService
             }
 
             [$key, $value] = explode('=', $line, 2);
-            $env[trim($key)] = trim($value);
+            $key = trim($key);
+            $value = trim($value);
+
+            // Check if this key should be masked
+            $shouldMask = false;
+            foreach ($sensitiveKeys as $sensitiveKey) {
+                if (str_contains($sensitiveKey, '*')) {
+                    // Handle wildcard patterns like DB_PASSWORD_*
+                    $pattern = str_replace('*', '', $sensitiveKey);
+                    if (str_starts_with($key, $pattern)) {
+                        $shouldMask = true;
+                        break;
+                    }
+                } elseif ($key === $sensitiveKey) {
+                    $shouldMask = true;
+                    break;
+                }
+            }
+
+            // Mask the value if sensitive
+            if ($shouldMask && !empty($value)) {
+                $value = '********';
+            }
+
+            $env[$key] = $value;
         }
 
         return $env;
