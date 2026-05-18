@@ -37,27 +37,139 @@ class ToolController extends Controller
         $projectPath = $request->input('project_path') ?: $this->getProjectPath();
 
         if (!$projectPath) {
-            return response()->json(['success' => false, 'error' => 'No active project']);
+            return response()->json(['success' => false, 'error' => 'No active project.']);
         }
 
         if (empty(trim($command))) {
-            return response()->json(['success' => false, 'error' => 'Command is required']);
+            return response()->json(['success' => false, 'error' => 'Command is required.']);
+        }
+
+        // SECURITY: Validate command against whitelist before execution
+        if (!$this->isArtisanCommandAllowed($command)) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Command not permitted in panel. Use SSH for unrestricted access.',
+            ]);
         }
 
         try {
             $result = Process::path($projectPath)
-                ->timeout(120)
+                ->timeout(60)
                 ->run('php artisan ' . $command);
+
+            // Truncate output if too large (> 50KB)
+            $output = $result->output();
+            if (strlen($output) > 51200) {
+                $output = substr($output, 0, 51200) . "\n[output truncated]";
+            }
 
             return response()->json([
                 'success' => $result->successful(),
-                'output' => $result->output(),
+                'output' => $output,
                 'error' => $result->errorOutput(),
                 'exit_code' => $result->exitCode(),
             ]);
         } catch (\Throwable $e) {
-            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+            return response()->json(['success' => false, 'error' => 'Command execution failed.']);
         }
+    }
+
+    /**
+     * Whitelist of allowed artisan commands in panel terminal.
+     * Destructive, secrets-exposing, and interactive commands are BLOCKED.
+     */
+    protected function getAllowedArtisanCommands(): array
+    {
+        return [
+            // Cache management
+            'cache:clear' => true,
+            'cache:forget' => true,
+            'config:clear' => true,
+            'config:cache' => true,
+            'view:clear' => true,
+            'view:cache' => true,
+            'route:clear' => true,
+            'route:cache' => true,
+            'route:list' => true,
+            'event:clear' => true,
+            'event:cache' => true,
+            'optimize:clear' => true,
+            'optimize' => true,
+
+            // Migrations (read-only)
+            'migrate:status' => true,
+            'migrate:rollback' => true,
+
+            // Queue management
+            'queue:restart' => true,
+            'queue:flush' => true,
+            'queue:prune-batches' => true,
+
+            // Environment
+            'key:generate' => true,
+            'package:discover' => true,
+
+            // Storage
+            'storage:link' => true,
+
+            // Generators (scaffold only)
+            'make:seeder' => true,
+            'make:migration' => true,
+            'make:model' => true,
+            'make:controller' => true,
+            'make:request' => true,
+            'make:middleware' => true,
+            'make:job' => true,
+            'make:listener' => true,
+            'make:event' => true,
+            'make:mail' => true,
+            'make:notification' => true,
+            'make:provider' => true,
+        ];
+    }
+
+    /**
+     * Blocklist of dangerous commands — never allowed regardless of whitelist.
+     */
+    protected function getBlockedArtisanCommands(): array
+    {
+        return [
+            'migrate:fresh', 'migrate:refresh', 'migrate:fresh --seed',
+            'db:seed', 'db:wipe', 'db:reset',
+            'env:pull', 'env:push',
+            'key:generate --show',
+            'tinker', 'inspire',
+            'share', 'invoice:new',
+            'test', 'dusk', 'dusk:fails',
+        ];
+    }
+
+    /**
+     * Check if an artisan command is allowed.
+     */
+    protected function isArtisanCommandAllowed(string $command): bool
+    {
+        // Normalize: collapse multiple spaces, trim
+        $normalized = trim(preg_replace('/\s+/', ' ', $command));
+
+        // Check blocklist first
+        foreach ($this->getBlockedArtisanCommands() as $blocked) {
+            if ($normalized === $blocked || str_starts_with($normalized, $blocked . ' ')) {
+                return false;
+            }
+        }
+
+        // Check whitelist
+        $allowed = $this->getAllowedArtisanCommands();
+
+        // Exact match
+        if (isset($allowed[$normalized])) {
+            return true;
+        }
+
+        // Base command match (e.g., 'migrate' -> 'migrate:status', 'migrate:rollback')
+        $baseCommand = explode(' ', $normalized)[0];
+        return isset($allowed[$baseCommand]);
     }
 
     public function getLogs(Request $request)

@@ -247,19 +247,28 @@ class TerminalService
 
     /**
      * Handle `cd` command — update session cwd.
+     * SECURITY: Denies absolute paths and enforces sandbox boundary.
      */
     protected function handleCd(string $target): array
     {
         $current = $this->getCwd();
+        $project = $this->projectService->getActiveProject();
+        $basePath = $project ? $project['path'] : base_path(config('panel.projects_dir', 'Project'));
+
+        // Deny absolute paths entirely — prevents sandbox escape via /, /etc, /home, etc.
+        if (!empty($target) && str_starts_with($target, '/')) {
+            return [
+                'output' => '',
+                'error' => "cd: absolute paths are not permitted in panel terminal.\n",
+                'cwd' => $current,
+                'exit_code' => 1,
+            ];
+        }
 
         if (empty($target) || $target === '~') {
-            $project = $this->projectService->getActiveProject();
-            $newCwd = $project ? $project['path'] : base_path();
+            $newCwd = $basePath;
         } elseif ($target === '-') {
-            // cd to previous (not supported — fallback to current)
             $newCwd = $current;
-        } elseif (str_starts_with($target, '/')) {
-            $newCwd = $target;
         } else {
             $target = trim($target, '"\'');
             $newCwd = $current . DIRECTORY_SEPARATOR . $target;
@@ -271,6 +280,18 @@ class TerminalService
             return [
                 'output' => '',
                 'error' => "cd: {$target}: tidak ada direktori tersebut\n",
+                'cwd' => $current,
+                'exit_code' => 1,
+            ];
+        }
+
+        // Enforce sandbox boundary: resolved path must be within allowed project directory.
+        // This prevents escape via symlinks inside the project.
+        $realBase = realpath($basePath);
+        if (!$realBase || !str_starts_with($resolved, $realBase . DIRECTORY_SEPARATOR)) {
+            return [
+                'output' => '',
+                'error' => "cd: access denied: path outside project boundary.\n",
                 'cwd' => $current,
                 'exit_code' => 1,
             ];
