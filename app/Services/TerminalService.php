@@ -9,6 +9,7 @@ class TerminalService
 {
     public function __construct(
         protected ProjectService $projectService,
+        protected TerminalCommandPolicy $policy,
     ) {}
 
     /**
@@ -27,6 +28,7 @@ class TerminalService
         $cwd = $project ? $project['path'] : base_path(config('panel.projects_dir', 'Project'));
 
         Session::put('terminal_cwd', $cwd);
+
         return $cwd;
     }
 
@@ -36,18 +38,21 @@ class TerminalService
     public function resetCwd(): string
     {
         Session::forget('terminal_cwd');
+
         return $this->getCwd();
     }
 
     /**
-     * Execute a command. Handles `cd` specially (mutates session cwd).
-     * All other commands run via Symfony Process with security restrictions.
+     * Execute a command. Handles `cd`/`clear`/`pwd` builtins; everything
+     * else passes through TerminalCommandPolicy and then runs via
+     * `bash -c` (Symfony Process). Chaining is allowed; substitution,
+     * eval flags, and disallowed redirects are blocked by the policy.
      */
     public function execute(string $command): array
     {
         $command = trim($command);
 
-        if (empty($command)) {
+        if ($command === '') {
             return [
                 'output' => '',
                 'error' => '',
@@ -56,12 +61,12 @@ class TerminalService
             ];
         }
 
-        // Handle `cd` specially
+        // Builtins: handled before the policy check so `cd`, `clear`,
+        // and `pwd` always work, regardless of the rest of the policy.
         if (preg_match('/^cd(\s+(.*))?$/', $command, $matches)) {
             return $this->handleCd($matches[2] ?? '');
         }
 
-        // Handle `clear` / `cls`
         if ($command === 'clear' || $command === 'cls') {
             return [
                 'output' => '',
@@ -72,64 +77,28 @@ class TerminalService
             ];
         }
 
-        // Handle `pwd`
         if ($command === 'pwd') {
             return [
-                'output' => $this->getCwd() . "\n",
+                'output' => $this->getCwd()."\n",
                 'error' => '',
                 'cwd' => $this->getCwd(),
                 'exit_code' => 0,
             ];
         }
 
-        // Block dangerous interactive commands gracefully
-        $blocked = ['vim', 'vi', 'nano', 'emacs', 'top', 'htop', 'less', 'more', 'man', 'ssh', 'mysql', 'psql', 'sudo'];
-        $firstWord = strtolower(strtok($command, ' '));
-        if (in_array($firstWord, $blocked)) {
+        if ($reason = $this->policy->reason($command)) {
             return [
                 'output' => '',
-                'error' => "[hermes] '{$firstWord}' adalah perintah interaktif yang tidak didukung di terminal panel ini.\n[hermes] Gunakan SSH langsung untuk perintah interaktif.\n",
+                'error' => '[hermes] '.$reason."\n",
                 'cwd' => $this->getCwd(),
                 'exit_code' => 1,
             ];
         }
 
-        // Block command chaining operators to prevent command injection
-        // Only allow single commands (no semicolons, pipes, &&, ||, &, $, backticks, etc.)
-        if ($this->containsCommandChaining($command)) {
-            return [
-                'output' => '',
-                'error' => "[hermes] Command chaining (;, &&, ||, |, &) tidak diizinkan untuk keamanan.\n",
-                'cwd' => $this->getCwd(),
-                'exit_code' => 1,
-            ];
-        }
-
-        // Block dangerous shell patterns
-        if ($this->containsDangerousPatterns($command)) {
-            return [
-                'output' => '',
-                'error' => "[hermes] Pola perintah berbahaya tidak diizinkan.\n",
-                'cwd' => $this->getCwd(),
-                'exit_code' => 1,
-            ];
-        }
-
-        // Run via Process with individual arguments (not shell command)
         try {
             $cwd = $this->getCwd();
-            $args = $this->parseCommandToArgs($command);
 
-            if (empty($args)) {
-                return [
-                    'output' => '',
-                    'error' => '',
-                    'cwd' => $cwd,
-                    'exit_code' => 0,
-                ];
-            }
-
-            $process = new Process($args, $cwd);
+            $process = new Process(['bash', '-c', $command], $cwd);
             $process->setTimeout(60);
             $process->setEnv(['TERM' => 'dumb', 'NO_COLOR' => '1']);
             $process->run();
@@ -143,106 +112,11 @@ class TerminalService
         } catch (\Throwable $e) {
             return [
                 'output' => '',
-                'error' => '[hermes] ' . $e->getMessage() . "\n",
+                'error' => '[hermes] '.$e->getMessage()."\n",
                 'cwd' => $this->getCwd(),
                 'exit_code' => 1,
             ];
         }
-    }
-
-    /**
-     * Check if command contains command chaining operators.
-     */
-    protected function containsCommandChaining(string $command): bool
-    {
-        // Block: ; && || | & $() `` < > >> << and newlines in unexpected places
-        $blockedPatterns = [
-            '/[;\&\|]{2,}/',      // &&, ||, ;;
-            '/[;\&\|]\s*[\&\|]/', // ;& ;| &| etc
-            '/\$\(/',            // Command substitution $
-            '/`[^`]+`/',          // Backtick command substitution
-            '/\\\n/',            // Line continuation
-            '/>/',                // Output redirect
-            '/<\s*\//',          // Input redirect
-        ];
-
-        foreach ($blockedPatterns as $pattern) {
-            if (preg_match($pattern, $command)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Check for dangerous shell patterns.
-     */
-    protected function containsDangerousPatterns(string $command): bool
-    {
-        // Block dangerous commands that could be used for injection
-        $blockedCommands = [
-            '/\brm\s+-[rf]+\b/i',
-            '/\bdel\s+\/[fqs]/i',
-            '/\bmkfs\b/i',
-            '/\bdd\s+/i',
-            '/\bcat\s+/i',
-            '/\bnc\s+/i',
-            '/\bwget\s+/i',
-            '/\bcurl\s+/i',
-            '/\bnohup\s+/i',
-            '/\beval\b/i',
-            '/\bsource\b/i',
-        ];
-
-        foreach ($blockedCommands as $pattern) {
-            if (preg_match($pattern, $command)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Parse command string into individual arguments safely.
-     * Uses shlex-style parsing to handle quoted arguments.
-     */
-    protected function parseCommandToArgs(string $command): array
-    {
-        $args = [];
-        $current = '';
-        $inQuote = false;
-        $quoteChar = '';
-        $length = strlen($command);
-
-        for ($i = 0; $i < $length; $i++) {
-            $char = $command[$i];
-
-            if ($inQuote) {
-                if ($char === $quoteChar) {
-                    $inQuote = false;
-                } else {
-                    $current .= $char;
-                }
-            } elseif ($char === '"' || $char === "'") {
-                $inQuote = true;
-                $quoteChar = $char;
-            } elseif ($char === ' ' || $char === '\t' || $char === '\n' || $char === '\r') {
-                if ($current !== '') {
-                    $args[] = $current;
-                    $current = '';
-                }
-            } else {
-                $current .= $char;
-            }
-        }
-
-        if ($current !== '') {
-            $args[] = $current;
-        }
-
-        return $args;
     }
 
     /**
@@ -256,7 +130,7 @@ class TerminalService
         $basePath = $project ? $project['path'] : base_path(config('panel.projects_dir', 'Project'));
 
         // Deny absolute paths entirely — prevents sandbox escape via /, /etc, /home, etc.
-        if (!empty($target) && str_starts_with($target, '/')) {
+        if (! empty($target) && str_starts_with($target, '/')) {
             return [
                 'output' => '',
                 'error' => "cd: absolute paths are not permitted in panel terminal.\n",
@@ -271,12 +145,12 @@ class TerminalService
             $newCwd = $current;
         } else {
             $target = trim($target, '"\'');
-            $newCwd = $current . DIRECTORY_SEPARATOR . $target;
+            $newCwd = $current.DIRECTORY_SEPARATOR.$target;
         }
 
         $resolved = realpath($newCwd);
 
-        if (!$resolved || !is_dir($resolved)) {
+        if (! $resolved || ! is_dir($resolved)) {
             return [
                 'output' => '',
                 'error' => "cd: {$target}: tidak ada direktori tersebut\n",
@@ -288,7 +162,8 @@ class TerminalService
         // Enforce sandbox boundary: resolved path must be within allowed project directory.
         // This prevents escape via symlinks inside the project.
         $realBase = realpath($basePath);
-        if (!$realBase || !str_starts_with($resolved, $realBase . DIRECTORY_SEPARATOR)) {
+
+        if (! $realBase || ! str_starts_with($resolved, $realBase.DIRECTORY_SEPARATOR)) {
             return [
                 'output' => '',
                 'error' => "cd: access denied: path outside project boundary.\n",
@@ -318,7 +193,8 @@ class TerminalService
         if ($project && str_starts_with($cwd, $project['path'])) {
             $relative = substr($cwd, strlen($project['path']));
             $relative = trim($relative, DIRECTORY_SEPARATOR);
-            return $relative ? '~/' . str_replace('\\', '/', $relative) : '~';
+
+            return $relative ? '~/'.str_replace('\\', '/', $relative) : '~';
         }
 
         // Shorten long paths
