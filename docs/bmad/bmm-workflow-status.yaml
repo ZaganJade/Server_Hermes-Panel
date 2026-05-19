@@ -1,0 +1,195 @@
+# BMAD Method v6 - Workflow Status
+# Auto-updated by BMAD commands. Source of truth for project state.
+
+project_name: "Hermes Panel"
+project_level: 3
+adoption_strategy: "forward-only"
+last_workflow: "dev-story"
+last_workflow_date: "2026-05-19"
+initialized_at: "2026-05-19"
+initialized_by: "manual setup (Strategy A: forward-only)"
+
+# Phase 1: Analysis (Product Discovery)
+phase_1_analysis:
+  product_brief_completed: false
+  product_brief_path: null
+  product_brief_date: null
+  notes: |
+    Existing project context lives in Server_Hermes-Panel/agents.md.
+    Run /product-brief only when introducing a new feature line that needs vision-level framing.
+
+# Phase 2: Planning (Requirements)
+phase_2_planning:
+  prd_completed: false
+  prd_path: null
+  prd_date: null
+  tech_specs:
+    - sub_project: "v3.1"
+      title: "Real-time terminal"
+      path: "docs/superpowers/specs/2026-05-19-realtime-terminal-design.md"
+      date: "2026-05-19"
+      origin: "brainstorming-skill"
+      note: "Design doc produced via brainstorming skill (13 decisions logged); equivalent to /tech-spec output"
+  notes: |
+    For most new work, prefer /tech-spec scoped to a single module/feature.
+    Reserve /prd for cross-module initiatives.
+    v3.1 design captured outside formal /tech-spec command but registered here for state tracking.
+
+# Phase 3: Solutioning (Architecture)
+phase_3_solutioning:
+  architecture_completed: false
+  architecture_path: null
+  architecture_date: null
+  gate_check_passed: false
+  gate_check_score: null
+  notes: |
+    Backfill architecture only when refactoring an existing module.
+    Greenfield modules: /architecture before /create-story.
+
+# Phase 4: Implementation (Development)
+phase_4_implementation:
+  sprints_planned: 1
+  stories_created: 8
+  stories_completed: 1
+  active_sprint: "v3.1"
+  sprints:
+    - id: "v3.1"
+      title: "Real-time terminal (sub-project of v3 personal cockpit)"
+      branch: "feature/v3.1-realtime-terminal"
+      design_doc: "docs/superpowers/specs/2026-05-19-realtime-terminal-design.md"
+      story_index: "docs/bmad/stories/v3.1-INDEX.md"
+      stories:
+        - { id: "v3.1-01", title: "Install Reverb + broadcasting config",          status: "done",  deps: [], commit: "34e9c69" }
+        - { id: "v3.1-02", title: "Extract TerminalCommandPolicy",                  status: "ready", deps: [] }
+        - { id: "v3.1-03", title: "TerminalSessionService + cache schema",          status: "ready", deps: ["v3.1-02"] }
+        - { id: "v3.1-04", title: "Tick-loop artisan command + supervisord entry",  status: "ready", deps: ["v3.1-03"] }
+        - { id: "v3.1-05", title: "API contract + controller update",                status: "ready", deps: ["v3.1-03", "v3.1-04"] }
+        - { id: "v3.1-06", title: "Frontend bundle: Alpine npm + Echo + xterm",      status: "ready", deps: ["v3.1-01"] }
+        - { id: "v3.1-07", title: "Floating panel UI + Alpine component",            status: "ready", deps: ["v3.1-05", "v3.1-06"] }
+        - { id: "v3.1-08", title: "Idle timeout default 15min + polish + E2E",       status: "ready", deps: ["v3.1-07"] }
+  umbrella:
+    v3:
+      title: "Hermes Panel v3 — Personal server cockpit"
+      sub_projects:
+        - { id: "v3.1", title: "Real-time terminal",            status: "active"  }
+        - { id: "v3.2", title: "VPS monitoring",                 status: "backlog" }
+        - { id: "v3.3", title: "Multi-language project layer",   status: "backlog" }
+        - { id: "v3.4", title: "Server admin (aaPanel-lite)",    status: "backlog" }
+
+# Workflow log (append-only audit trail)
+workflow_log:
+  - workflow: "setup"
+    date: "2026-05-19"
+    note: "BMAD Method v6 initialized with forward-only strategy at project level 3"
+  - workflow: "code-review"
+    date: "2026-05-19"
+    scope: "unstaged working tree (8 modified, 1 deleted)"
+    files:
+      - ".env.example"
+      - "README.md"
+      - "agents.md"
+      - "app/Http/Controllers/Panel/AuthController.php"
+      - "app/Http/Middleware/OwnerAccess.php"
+      - "app/Http/Middleware/PanelApiCsrf.php (deleted)"
+      - "config/panel.php"
+      - "resources/views/panel/layout.blade.php"
+    high_confidence_issues: 0
+    low_confidence_observations: 3
+    verdict: "clean — refactor introduces auth_enabled toggle without regressions"
+  - workflow: "hardening-rescan"
+    date: "2026-05-19"
+    trigger: "Option B implemented; user requested full hardening sweep"
+    scope: "OwnerAccess + AppServiceProvider + AuthController + routes/web.php + .env.example + config/panel.php + TerminalService + session config"
+    files_changed:
+      - "config/panel.php"
+      - ".env.example"
+      - "app/Http/Middleware/OwnerAccess.php"
+      - "app/Providers/AppServiceProvider.php"
+      - "routes/web.php"
+    fixes_applied:
+      - id: "HIGH-1"
+        status: "FIXED"
+        summary: "PANEL_AUTH_ENABLED default flipped to true; production guard refuses boot without dev_bypass"
+      - id: "HIGH-2"
+        status: "FIXED"
+        summary: "App::environment('local') silent bypass removed; replaced with explicit PANEL_DEV_BYPASS gate"
+      - id: "MED-1"
+        status: "FIXED"
+        summary: "?password= query string fallback removed; header-only authentication"
+      - id: "MED-2"
+        status: "FIXED"
+        summary: "throttle:10,1 added on POST /panel/login (defense-in-depth over controller's RateLimiter)"
+      - id: "MED-3"
+        status: "FIXED"
+        story: "v3.1-01"
+        commit: "34e9c69"
+        summary: "Reverb installed and broadcasting layer registered in story v3.1-01"
+      - id: "MED-7"
+        status: "DOCUMENTED"
+        summary: "Added SESSION_SECURE_COOKIE=true reminder in .env.example for HTTPS deployment"
+    pending_decisions:
+      - id: "MED-4"
+        severity: "medium"
+        title: "X-WA-Sender header is spoofable on public domain"
+        question: "Is the WhatsApp gateway co-located on the panel server (loopback only)?"
+      - id: "MED-5"
+        severity: "medium"
+        title: "TerminalService blocklist is incomplete and inconsistent"
+        details: "cat blocked but tee/awk/sed/chmod/find allowed; rm -rf blocked but rm --recursive --force lets through; php/python/node -e/-c bypass wget/curl block"
+        addressed_by: "v3.1-02 (TerminalCommandPolicy extract)"
+      - id: "MED-6"
+        severity: "medium-low"
+        title: "panel/api/* exempt from CSRF; relies on SameSite=lax cookie"
+        details: "Already mitigated by SameSite=lax + HttpOnly + encrypted session. Sufficient for most threat models."
+      - id: "REVERB-AUDIT"
+        severity: "pending"
+        title: "Audit broadcast auth once Reverb is installed"
+        addressed_by: "v3.1-05 (API contract + channel auth + feature tests)"
+        checklist:
+          - "routes/channels.php must gate terminal channel with session('panel_auth') === true"
+          - "BroadcastServiceProvider registered"
+          - "Reverb refuses connection when PANEL_AUTH_ENABLED=true && session not authed"
+    verdict: "safe to deploy public with HTTPS + reverse proxy. WhatsApp bypass and TerminalService allowlist remain as policy decisions."
+  - workflow: "brainstorming"
+    date: "2026-05-19"
+    sub_project: "v3.1"
+    output: "docs/superpowers/specs/2026-05-19-realtime-terminal-design.md"
+    skill: "brainstorming"
+    decisions: 13
+    note: "User-driven design session for real-time terminal. 13 numbered decisions logged in design doc."
+  - workflow: "sprint-planning"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    branch: "feature/v3.1-realtime-terminal"
+    stories_created: 8
+    story_index: "docs/bmad/stories/v3.1-INDEX.md"
+    pending_decisions_addressed:
+      - { id: "MED-3",        story: "v3.1-01", note: "Reverb install closes the gap" }
+      - { id: "MED-5",        story: "v3.1-02", note: "TerminalCommandPolicy extract is the home for evolving rules" }
+      - { id: "REVERB-AUDIT", story: "v3.1-05", note: "Channel auth + 3 feature tests" }
+    note: "v3.1 sub-project decomposed into 8 sequential-with-parallel-where-possible stories."
+  - workflow: "dev-story"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    story: "v3.1-01"
+    title: "Install Reverb + broadcasting config"
+    branch: "story/v3.1-01-reverb-install"
+    commit: "34e9c69"
+    files_touched:
+      - "composer.json"
+      - "composer.lock"
+      - "config/reverb.php"
+      - "routes/channels.php"
+      - "bootstrap/app.php"
+      - ".env.example"
+      - "README.md"
+    acceptance:
+      ac1_composer_require: "DONE"
+      ac2_server_env_keys: "DONE"
+      ac3_vite_env_keys: "DONE"
+      ac4_supervisord_runs: "DEFERRED-deploy-time"
+      ac5_broadcast_smoke: "DEFERRED-story-06-when-echo-client-exists"
+      ac6_readme_stub: "DONE"
+      ac7_pint_clean: "DONE"
+    closes_pending_decision: "MED-3"
+    note: "Foundation laid. Channel auth callback in routes/channels.php is empty placeholder; terminal channel registration happens in story v3.1-05."

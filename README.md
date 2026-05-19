@@ -413,11 +413,41 @@ and the SQL identifier validator is still on the to-do list.
 
 ---
 
+## Real-time terminal (v3.1, in progress)
+
+The panel ships with a sandboxed shell scoped to the active project. As
+of v3.1 it is being upgraded from synchronous request-response to a
+streaming model backed by Laravel Reverb.
+
+**How it's wired**
+
+- Reverb runs inside the panel container on port `8081`, supervised by `supervisord` (see `docker/supervisord.conf`).
+- Container nginx proxies `/app` to `127.0.0.1:8081`, so browsers connect through the same domain as the rest of the panel — no extra port to open in your firewall or Cloudflare.
+- Public WebSocket URL is `wss://<your-domain>/app` once the host reverse proxy terminates TLS.
+
+**Configuration**
+
+All `REVERB_*` keys live in `.env.example`. The defaults assume the
+container is behind a reverse proxy on a public HTTPS domain. For local
+HTTP development without a proxy, set `REVERB_HOST=127.0.0.1`,
+`REVERB_PORT=8081`, `REVERB_SCHEME=http`, and the matching `VITE_REVERB_*`
+values. The `VITE_REVERB_*` block is what `resources/js/echo.js` reads
+at build time to point the browser at the right host/port/scheme.
+
+**Status**
+
+v3.1 sub-project is split into 8 stories. As of this README, story 01
+(Reverb install) is the foundation. The streaming UI itself — floating
+panel, xterm.js, output buffering, idle watchdog — lands in subsequent
+stories. See `docs/bmad/stories/v3.1-INDEX.md` for the full breakdown.
+
+---
+
 ## Roadmap Notes
 
 These are real gaps, not marketing copy:
 
-- The terminal is HTTP request-response, not WebSocket-backed. Reverb is wired into supervisord but the proxy / port pair is not finished. Long-running interactive output should keep going through SSH for now.
+- The terminal upgrade is in progress (v3.1). Until story 07 lands, the existing File Manager terminal continues to use the synchronous `/execute-sync` path. Long-running interactive output should keep going through SSH for now.
 - The file editor is a styled `<textarea>`. CodeMirror was on the original wishlist; it isn't installed.
 - `CleanupDatabaseTrash` calls `onlyTrashed()` on the query builder, which only exists on Eloquent models with `SoftDeletes`. The job currently handles this gracefully, but the query path needs rewriting to use `whereNotNull('deleted_at')` directly.
 - Test coverage is thin. Auth middleware behaviour, the path-traversal guard, and the identifier validator are good first targets.
