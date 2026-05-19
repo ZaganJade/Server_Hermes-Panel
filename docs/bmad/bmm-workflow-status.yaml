@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 1
   stories_created: 8
-  stories_completed: 1
+  stories_completed: 2
   active_sprint: "v3.1"
   sprints:
     - id: "v3.1"
@@ -60,7 +60,7 @@ phase_4_implementation:
       story_index: "docs/bmad/stories/v3.1-INDEX.md"
       stories:
         - { id: "v3.1-01", title: "Install Reverb + broadcasting config",          status: "done",  deps: [], commit: "34e9c69" }
-        - { id: "v3.1-02", title: "Extract TerminalCommandPolicy",                  status: "ready", deps: [] }
+        - { id: "v3.1-02", title: "Extract TerminalCommandPolicy",                  status: "done",  deps: [], commit: "52f7e02" }
         - { id: "v3.1-03", title: "TerminalSessionService + cache schema",          status: "ready", deps: ["v3.1-02"] }
         - { id: "v3.1-04", title: "Tick-loop artisan command + supervisord entry",  status: "ready", deps: ["v3.1-03"] }
         - { id: "v3.1-05", title: "API contract + controller update",                status: "ready", deps: ["v3.1-03", "v3.1-04"] }
@@ -134,9 +134,11 @@ workflow_log:
         question: "Is the WhatsApp gateway co-located on the panel server (loopback only)?"
       - id: "MED-5"
         severity: "medium"
+        status: "FIXED"
+        story: "v3.1-02"
+        commit: "52f7e02"
         title: "TerminalService blocklist is incomplete and inconsistent"
-        details: "cat blocked but tee/awk/sed/chmod/find allowed; rm -rf blocked but rm --recursive --force lets through; php/python/node -e/-c bypass wget/curl block"
-        addressed_by: "v3.1-02 (TerminalCommandPolicy extract)"
+        details: "Resolved in story v3.1-02. Long-form rm --recursive blocked, eval flags blocked, redirect allowlist explicit, chaining allowed per design."
       - id: "MED-6"
         severity: "medium-low"
         title: "panel/api/* exempt from CSRF; relies on SameSite=lax cookie"
@@ -193,3 +195,30 @@ workflow_log:
       ac7_pint_clean: "DONE"
     closes_pending_decision: "MED-3"
     note: "Foundation laid. Channel auth callback in routes/channels.php is empty placeholder; terminal channel registration happens in story v3.1-05."
+  - workflow: "dev-story"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    story: "v3.1-02"
+    title: "Extract TerminalCommandPolicy + tighten blocklist"
+    branch: "story/v3.1-02-extract-policy"
+    commit: "52f7e02"
+    files_touched:
+      - "app/Services/TerminalCommandPolicy.php (new)"
+      - "app/Services/TerminalService.php"
+      - "tests/Unit/Services/TerminalCommandPolicyTest.php (new)"
+    tests:
+      total: 62
+      passed: 62
+      assertions: 106
+      new_tests: 60
+      new_assertions: 104
+    rule_changes:
+      relaxed: "chaining (;, &&, ||, |) now allowed per design decision #6"
+      tightened:
+        - "rm --recursive --force on protected roots blocked (was bypassable)"
+        - "eval flags blocked: php -r, python -c, node -e, perl -e, ruby -e"
+        - "trailing & (background fork) blocked"
+        - "newline/CR injection blocked"
+        - "redirect allowlist: only /tmp, /var/tmp, /dev/{null,zero,stdout,stderr}"
+    closes_pending_decision: "MED-5"
+    note: "Policy is now the single place to evolve blocklist. Stories 03-05 will inject TerminalCommandPolicy via constructor."
