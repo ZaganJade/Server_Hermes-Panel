@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 1
   stories_created: 8
-  stories_completed: 5
+  stories_completed: 6
   active_sprint: "v3.1"
   sprints:
     - id: "v3.1"
@@ -64,7 +64,7 @@ phase_4_implementation:
         - { id: "v3.1-03", title: "TerminalSessionService + cache schema",          status: "done",  deps: ["v3.1-02"] }
         - { id: "v3.1-04", title: "Tick-loop artisan command + supervisord entry",  status: "done",  deps: ["v3.1-03"] }
         - { id: "v3.1-05", title: "API contract + controller update",                status: "done",  deps: ["v3.1-03", "v3.1-04"] }
-        - { id: "v3.1-06", title: "Frontend bundle: Alpine npm + Echo + xterm",      status: "ready", deps: ["v3.1-01"] }
+        - { id: "v3.1-06", title: "Frontend bundle: Alpine npm + Echo + xterm",      status: "done",  deps: ["v3.1-01"] }
         - { id: "v3.1-07", title: "Floating panel UI + Alpine component",            status: "ready", deps: ["v3.1-05", "v3.1-06"] }
         - { id: "v3.1-08", title: "Idle timeout default 15min + polish + E2E",       status: "ready", deps: ["v3.1-07"] }
   umbrella:
@@ -302,3 +302,24 @@ workflow_log:
       - "DELETE /panel/api/terminal/history"
     closes_pending_decision: "REVERB-AUDIT"
     note: "OwnerAccess middleware gates async /execute via the existing chain. Channel callback rejects in trusted-network bypass mode and without panel_auth, accepts otherwise with presence data {user: 'panel', project}."
+  - workflow: "dev-story"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    story: "v3.1-06"
+    title: "Frontend bundle: Alpine npm + Echo + xterm + addons"
+    branch: "feature/v3.1-realtime-terminal (direct)"
+    files_touched:
+      - "package.json + package-lock.json (npm install)"
+      - "resources/js/app.js (Alpine npm bundle entry)"
+      - "resources/js/echo.js (new, Reverb broadcaster wiring)"
+      - "resources/js/terminal/index.js (new, Alpine data factory)"
+      - "resources/js/terminal/session.js (new, WS+REST client skeleton)"
+      - "resources/js/terminal/history.js (new, command history navigator)"
+      - "resources/js/terminal/xterm-instance.js (new, xterm factory + addons)"
+      - "resources/views/panel/layout.blade.php (drop CDN Alpine; @vite app.js)"
+    bundle_sizes:
+      app_js_raw_kb: 373.33
+      app_js_gzipped_kb: 104.30
+      target_gzipped_kb: 250
+      target_met: true
+    note: "Skeleton-only modules per story: hermesTerminal() Alpine factory exposes state shape, TerminalSession exposes async fetch/execute/stop/replay, TerminalHistory holds up/down arrow logic, createXtermInstance() builds xterm + 3 addons themed to match panel design tokens. Story v3.1-07 will mount xterm into DOM, wire keyboard shortcuts, and finish UI behaviour."
