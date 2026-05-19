@@ -14,7 +14,17 @@ return [
     |--------------------------------------------------------------------------
     | Authentication
     |--------------------------------------------------------------------------
+    | Hermes Panel is built for developers managing their own VPS. The
+    | safe default is auth ENABLED — session login + header password +
+    | WhatsApp number bypass are enforced. Set PANEL_AUTH_ENABLED=false
+    | only on a trusted network (SSH tunnel / VPN / private LAN); the
+    | panel will refuse to boot in production with auth disabled unless
+    | PANEL_DEV_BYPASS=true is also set explicitly.
     */
+
+    'auth_enabled' => filter_var(env('PANEL_AUTH_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+
+    'dev_bypass' => filter_var(env('PANEL_DEV_BYPASS', false), FILTER_VALIDATE_BOOLEAN),
 
     'username' => env('PANEL_USERNAME', 'admin'),
 
@@ -31,15 +41,8 @@ return [
     */
     'owner_numbers' => array_filter(
         explode(',', env('PANEL_OWNER_NUMBERS', '')),
-        fn ($n) => !empty(trim($n))
+        fn ($n) => ! empty(trim($n))
     ),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Bypass Password (Deprecated — use PANEL_PASSWORD)
-    |--------------------------------------------------------------------------
-    */
-    'bypass_password' => env('PANEL_BYPASS_PASSWORD', ''),
 
     /*
     |--------------------------------------------------------------------------

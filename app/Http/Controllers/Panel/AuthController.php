@@ -12,17 +12,26 @@ class AuthController extends Controller
 {
     public function login()
     {
+        // No auth means no login screen — hop straight to the dashboard.
+        if (! config('panel.auth_enabled', false)) {
+            return redirect()->route('panel.dashboard');
+        }
+
         return view('panel.login');
     }
 
     public function authenticate(Request $request)
     {
+        if (! config('panel.auth_enabled', false)) {
+            return redirect()->route('panel.dashboard');
+        }
+
         $request->validate([
             'username' => 'required|string',
             'password' => 'required|string',
         ]);
 
-        $throttleKey = strtolower($request->input('username')) . '|' . $request->ip();
+        $throttleKey = strtolower($request->input('username')).'|'.$request->ip();
 
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
             $seconds = RateLimiter::availableIn($throttleKey);
@@ -57,6 +66,10 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         $request->session()->forget(['panel_auth', 'panel_auth_time', 'active_project', 'query_history']);
+
+        if (! config('panel.auth_enabled', false)) {
+            return redirect()->route('panel.dashboard');
+        }
 
         return redirect()->route('panel.login');
     }

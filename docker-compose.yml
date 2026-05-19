@@ -4,8 +4,13 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     container_name: hermes-panel
+    # Bound to loopback by default. Put a reverse proxy (Nginx, Caddy,
+    # Traefik, Cloudflare Tunnel, …) in front to terminate TLS and forward
+    # to 127.0.0.1:8080. To expose directly, change to "8080:8080" — but
+    # only do that when PANEL_AUTH_ENABLED=true and a firewall is in
+    # place, since the panel can edit files and run shell commands.
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./Project:/var/www/html/Project
       - ./storage:/var/www/html/storage
@@ -24,7 +29,7 @@ services:
   #     MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
   #     MYSQL_DATABASE: hermes_panel
   #   ports:
-  #     - "3306:3306"
+  #     - "127.0.0.1:3306:3306"
   #   volumes:
   #     - hermes-db-data:/var/lib/mysql
   #   restart: unless-stopped
@@ -38,7 +43,7 @@ services:
   #     POSTGRES_USER: ${DB_USERNAME}
   #     POSTGRES_PASSWORD: ${DB_PASSWORD}
   #   ports:
-  #     - "5432:5432"
+  #     - "127.0.0.1:5432:5432"
   #   volumes:
   #     - hermes-db-data:/var/lib/postgresql/data
   #   restart: unless-stopped

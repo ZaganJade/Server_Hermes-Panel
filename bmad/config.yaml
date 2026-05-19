@@ -1,0 +1,30 @@
+# BMAD Method v6 - Project Configuration
+# Hermes Panel workspace
+
+project_name: "Hermes Panel"
+project_type: "web-app"  # Laravel 13 + Alpine.js + Tailwind CSS server admin panel
+project_level: 3         # Multi-module running project, comprehensive workflow
+
+# Output folder (relative to project root)
+# Routed to docs/bmad to avoid conflicts with docs/superpowers and openspec/
+output_folder: "docs/bmad"
+
+# Module-specific settings
+bmm:
+  workflow_status_file: "docs/bmad/bmm-workflow-status.yaml"
+  sprint_status_file: "docs/bmad/sprint-status.yaml"
+
+# Path configuration
+paths:
+  docs: "docs/bmad"
+  stories: "docs/bmad/stories"
+  tests: "tests"
+
+# Adoption strategy: Strategy A (forward-only)
+# - Existing features stay documented in agents.md (root)
+# - BMAD artifacts only for new features and module-level refactors going forward
+# - Backfill PRD/architecture only when touching a module that needs it
+adoption:
+  strategy: "forward-only"
+  legacy_docs: "agents.md"                # Detailed project context
+  conventions_doc: "agents.md"            # Same file holds AI-agent conventions

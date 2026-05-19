@@ -578,3 +578,73 @@ return [
 ---
 
 *Document generated for Claude Code agent context. All architectural decisions and design tokens are defined here.*
+
+---
+
+## 14. AI Agent Workflow (BMAD + OpenSpec)
+
+This project uses **BMAD Method v6** and **OpenSpec** for agent-driven development. AI agents (pi, Claude Code, etc.) MUST follow the conventions below.
+
+### 14.1 Read-First Rule
+
+Before making any change to this codebase, an agent must read this `agents.md` end-to-end. It is the source of truth for tech stack, architecture, conventions, and constraints. Do not infer behavior from code alone.
+
+### 14.2 BMAD Method v6 (active)
+
+Adoption strategy: **forward-only**.
+
+- Existing features stay documented in this file (sections 1–13). Do not retroactively rewrite them as BMAD PRDs unless explicitly requested.
+- New features and module-level refactors go through BMAD: `/tech-spec` (small) or `/prd` → `/architecture` → `/create-story` → `/dev-story`.
+- All BMAD artifacts go to `docs/bmad/`. Stories live in `docs/bmad/stories/`.
+- State file: `docs/bmad/bmm-workflow-status.yaml`. Update via BMAD commands, not by hand.
+- Project level: **3** (multi-module, comprehensive workflow). Do not downgrade.
+
+**Available BMAD skills:** `bmad-master`, `analyst`, `pm`, `architect`, `scrum-master`, `developer`, `ux-designer`, `builder`, `creative-intelligence`.
+
+**Available BMAD commands:** `/workflow-init`, `/workflow-status`, `/product-brief`, `/prd`, `/tech-spec`, `/architecture`, `/solutioning-gate-check`, `/sprint-planning`, `/create-story`, `/dev-story`, `/brainstorm`, `/research`, `/create-agent`, `/create-workflow`, `/create-ux-design`.
+
+### 14.3 OpenSpec (active)
+
+`openspec/` holds versioned change proposals for protocol/API contracts.
+
+- BMAD owns the **agile workflow** (PRD, architecture, stories, sprints).
+- OpenSpec owns **versioned spec change proposals**.
+- If a task spans both, propose the change in OpenSpec first, then drive implementation via BMAD `/create-story` → `/dev-story`.
+
+### 14.4 Code Review
+
+Use the global `code-review` skill (or `/code-review`) before merging any PR. It runs parallel agents for:
+
+- `agents.md` compliance check
+- Diff-only bug scan
+- Security & logic issue scan
+- Issue validation with confidence threshold ≥80
+
+### 14.5 Workflow Conventions
+
+- **Branching:** new feature work goes on a feature branch, never directly to `main`. One branch per BMAD story (e.g. `story/auth-otp` for story-001).
+- **Tests:** new code requires PHPUnit coverage for backend, Playwright for end-to-end UI flows. Tests live in `tests/`.
+- **Formatting:** run `vendor/bin/pint` before commit.
+- **Secrets:** `.env` is gitignored. Use `.env.example` as the template. Never echo `.env` values back in responses or commits.
+- **Migrations:** target the default DB connection unless the story explicitly says otherwise. Multi-DB connection support is a feature, not an accident.
+- **Status file:** commit `docs/bmad/bmm-workflow-status.yaml` so all contributors share state.
+
+### 14.6 Confirm-Before-Doing (security-sensitive)
+
+These require explicit user approval before executing:
+
+- Schema migrations on shared databases
+- Anything touching authentication, terminal, or file manager
+- Bulk file operations or recursive deletes
+- Changes to `docker-compose.yml`, PM2 configs, or `.env.example`
+- Force-push, rebase main, or any destructive git operation
+- WhatsApp header bypass auth changes (deliberate feature, see section 4)
+
+### 14.7 Allowed Without Confirmation
+
+- Read any file under project root
+- Run linters and formatters (`pint`, `vite build`)
+- Run PHPUnit and Playwright tests
+- Edit code on a feature branch
+- Create new BMAD stories under `docs/bmad/stories/`
+- Update BMAD artifacts via BMAD commands
