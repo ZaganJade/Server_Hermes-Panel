@@ -100,8 +100,18 @@ Route::prefix('panel')->name('panel.')->middleware('owner.access')->group(functi
 
     // AJAX: Terminal
     Route::get('/api/terminal/state', [TerminalController::class, 'state'])->name('api.terminal-state');
-    Route::post('/api/terminal/execute', [TerminalController::class, 'execute'])->name('api.terminal-execute');
+    Route::post('/api/terminal/execute', [TerminalController::class, 'execute'])
+        ->middleware('throttle:30,1')
+        ->name('api.terminal-execute');
+    Route::post('/api/terminal/execute-sync', [TerminalController::class, 'executeSync'])->name('api.terminal-execute-sync');
+    Route::post('/api/terminal/{session}/stop', [TerminalController::class, 'stop'])
+        ->where('session', '[A-Za-z0-9-]+')
+        ->name('api.terminal-stop');
+    Route::get('/api/terminal/{session}/replay', [TerminalController::class, 'replay'])
+        ->where('session', '[A-Za-z0-9-]+')
+        ->name('api.terminal-replay');
     Route::post('/api/terminal/reset', [TerminalController::class, 'reset'])->name('api.terminal-reset');
+    Route::delete('/api/terminal/history', [TerminalController::class, 'clearHistory'])->name('api.terminal-history-clear');
 
     // AJAX: Projects
     Route::post('/api/projects/switch', [ProjectController::class, 'switchProject'])->name('api.project-switch');
