@@ -322,4 +322,81 @@ class ToolController extends Controller
             return response()->json(['success' => false, 'error' => $e->getMessage()]);
         }
     }
+
+    /**
+     * List available seeder files from the active project's database/seeders directory.
+     */
+    public function listSeeders(Request $request)
+    {
+        $projectPath = $request->input('project_path') ?: $this->getProjectPath();
+
+        if (!$projectPath) {
+            return response()->json(['success' => false, 'seeders' => [], 'error' => 'No active project.']);
+        }
+
+        $seedersDir = $projectPath . '/database/seeders';
+
+        if (!is_dir($seedersDir)) {
+            return response()->json(['success' => true, 'seeders' => [], 'seeder_path' => $seedersDir]);
+        }
+
+        $files = scandir($seedersDir);
+        $seeders = [];
+
+        foreach ($files as $file) {
+            if (is_file($seedersDir . '/' . $file) && preg_match('/^(?!.*Test\.php$).*Seeder\.php$/', $file)) {
+                $seeders[] = [
+                    'file' => $file,
+                    'class' => pathinfo($file, PATHINFO_FILENAME),
+                ];
+            }
+        }
+
+        sort($seeders);
+
+        return response()->json([
+            'success' => true,
+            'seeders' => $seeders,
+            'seeder_path' => $seedersDir,
+        ]);
+    }
+
+    /**
+     * Run db:seed with optional specific seeder class.
+     */
+    public function dbSeed(Request $request)
+    {
+        $projectPath = $request->input('project_path') ?: $this->getProjectPath();
+        $seederClass = $request->input('seeder', '');
+
+        if (!$projectPath) {
+            return response()->json(['success' => false, 'output' => '', 'error' => 'No active project.']);
+        }
+
+        $command = 'db:seed';
+        if (!empty($seederClass) && $seederClass !== 'DatabaseSeeder') {
+            $command .= ' --class=' . $seederClass;
+        }
+        $command .= ' --force';
+
+        try {
+            $result = Process::path($projectPath)
+                ->timeout(60)
+                ->run('php artisan ' . $command);
+
+            $output = $result->output();
+            if (strlen($output) > 51200) {
+                $output = substr($output, 0, 51200) . "\n[output truncated]";
+            }
+
+            return response()->json([
+                'success' => $result->successful(),
+                'output' => $output,
+                'error' => $result->errorOutput(),
+                'exit_code' => $result->exitCode(),
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'output' => '', 'error' => $e->getMessage()]);
+        }
+    }
 }

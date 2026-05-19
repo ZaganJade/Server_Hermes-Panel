@@ -33,7 +33,7 @@
 
     <!-- Tabs -->
     <div class="tabs-editorial animate-fade-up-1">
-        <button @click="activeTab = 'artisan'" class="tab-editorial" :class="activeTab === 'artisan' ? 'active' : ''">
+        <button @click="activeTab = 'artisan'; loadSeeders()" class="tab-editorial" :class="activeTab === 'artisan' ? 'active' : ''">
             <span class="glyph text-base leading-none">α</span> Artisan
         </button>
         <button @click="activeTab = 'logs'; loadLogs()" class="tab-editorial" :class="activeTab === 'logs' ? 'active' : ''">
@@ -68,6 +68,41 @@
                     <span x-text="artisanRunning ? 'Menjalankan…' : 'Eksekusi'"></span>
                     <span class="font-serif italic" x-show="!artisanRunning">↗</span>
                 </button>
+            </div>
+        </div>
+
+        <!-- Seeder Panel -->
+        <div class="border border-[color:var(--rule)] mb-6">
+            <div class="flex items-center justify-between px-5 py-4 border-b border-[color:var(--rule)] bg-ink-soft">
+                <div>
+                    <div class="section-label">Seeder</div>
+                    <p class="font-mono text-[10px] text-paper-dim tracking-wide mt-0.5">Jalankan seeder pada proyek aktif</p>
+                </div>
+                <button @click="loadSeeders()" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-copper transition-colors">
+                    ⟳ Refresh
+                </button>
+            </div>
+            <div class="p-5 bg-ink">
+                <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
+                    <div>
+                        <label class="label-mono">Pilih Seeder</label>
+                        <select x-model="selectedSeeder" class="select-editorial">
+                            <option value="">— Semua Seeder (DatabaseSeeder) —</option>
+                            <template x-for="seeder in seeders" :key="seeder.class">
+                                <option :value="seeder.class" x-text="seeder.file"></option>
+                            </template>
+                        </select>
+                        <p class="font-mono text-[9px] text-paper-dim mt-1" x-show="seeders.length > 0" x-text="seeders.length + ' seeder tersedia'"></p>
+                        <p class="font-mono text-[9px] text-rust mt-1" x-show="seedersError" x-text="seedersError"></p>
+                    </div>
+                    <button @click="runSeeder()" :disabled="seederRunning" class="btn-copper" :class="{ 'disabled': seederRunning }">
+                        <span x-text="seederRunning ? 'Menjalankan…' : 'Jalankan Seeder'"></span>
+                        <span class="font-serif italic" x-show="!seederRunning">↗</span>
+                    </button>
+                </div>
+                <div x-show="seederOutput" class="mt-4">
+                    <pre class="bg-ink-2 p-4 font-mono text-[11px] text-paper-soft whitespace-pre-wrap max-h-[200px] overflow-y-auto leading-relaxed border border-[color:var(--rule)]" x-text="seederOutput"></pre>
+                </div>
             </div>
         </div>
 
@@ -266,6 +301,7 @@ function toolsApp(suggestedCommands, projects) {
         suggestedCommands, projects,
         activeTab: 'artisan',
         artisanCommand: '', artisanOptions: '', artisanRunning: false, artisanOutput: '',
+        seeders: [], selectedSeeder: '', seederRunning: false, seederOutput: '', seedersError: '',
         logs: [], logFilter: 'all', logSearch: '', autoRefresh: false, autoRefreshTimer: null,
         failedJobs: [], failedCount: 0,
         composerProject: '', composerRunning: false, npmRunning: false, composerOutput: '', npmOutput: '',
@@ -286,6 +322,40 @@ function toolsApp(suggestedCommands, projects) {
                 else showToast('Selesai');
             } catch(e) { this.artisanOutput = 'Permintaan gagal'; }
             this.artisanRunning = false;
+        },
+
+        async loadSeeders() {
+            this.seedersError = '';
+            try {
+                const res = await fetch('{{ route("panel.api.seeders") }}', {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                const data = await res.json();
+                if (data.success) {
+                    this.seeders = data.seeders || [];
+                } else {
+                    this.seedersError = data.error || 'Gagal memuat seeder';
+                }
+            } catch(e) {
+                this.seedersError = 'Permintaan gagal';
+                this.seeders = [];
+            }
+        },
+
+        async runSeeder() {
+            this.seederRunning = true; this.seederOutput = '';
+            try {
+                const res = await fetch('{{ route("panel.api.db-seed") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf },
+                    body: JSON.stringify({ seeder: this.selectedSeeder })
+                });
+                const data = await res.json();
+                this.seederOutput = (data.output || '') + (data.error ? '\n' + data.error : '');
+                if (data.success) showToast('Seeder berhasil dijalankan');
+                else showToast('Seeder gagal', 'error');
+            } catch(e) { this.seederOutput = 'Permintaan gagal'; }
+            this.seederRunning = false;
         },
 
         async loadLogs(offset = 0) {
