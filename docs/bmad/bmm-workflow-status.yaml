@@ -4,7 +4,7 @@
 project_name: "Hermes Panel"
 project_level: 3
 adoption_strategy: "forward-only"
-last_workflow: "dev-story"
+last_workflow: "sprint-close"
 last_workflow_date: "2026-05-19"
 initialized_at: "2026-05-19"
 initialized_by: "manual setup (Strategy A: forward-only)"
@@ -50,8 +50,8 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 1
   stories_created: 8
-  stories_completed: 7
-  active_sprint: "v3.1"
+  stories_completed: 8
+  active_sprint: null
   sprints:
     - id: "v3.1"
       title: "Real-time terminal (sub-project of v3 personal cockpit)"
@@ -66,12 +66,12 @@ phase_4_implementation:
         - { id: "v3.1-05", title: "API contract + controller update",                status: "done",  deps: ["v3.1-03", "v3.1-04"] }
         - { id: "v3.1-06", title: "Frontend bundle: Alpine npm + Echo + xterm",      status: "done",  deps: ["v3.1-01"] }
         - { id: "v3.1-07", title: "Floating panel UI + Alpine component",            status: "done",  deps: ["v3.1-05", "v3.1-06"] }
-        - { id: "v3.1-08", title: "Idle timeout default 15min + polish + E2E",       status: "ready", deps: ["v3.1-07"] }
+        - { id: "v3.1-08", title: "Idle timeout default 15min + polish + E2E",       status: "done",  deps: ["v3.1-07"] }
   umbrella:
     v3:
       title: "Hermes Panel v3 — Personal server cockpit"
       sub_projects:
-        - { id: "v3.1", title: "Real-time terminal",            status: "active"  }
+        - { id: "v3.1", title: "Real-time terminal",            status: "done"   }
         - { id: "v3.2", title: "VPS monitoring",                 status: "backlog" }
         - { id: "v3.3", title: "Multi-language project layer",   status: "backlog" }
         - { id: "v3.4", title: "Server admin (aaPanel-lite)",    status: "backlog" }
@@ -340,3 +340,33 @@ workflow_log:
       target_gzipped_kb: 250
       target_met: true
     note: "Floating panel mounted via @include('panel._terminal') at the end of the layout. Toggle dispatched via 'hermes-terminal-toggle' window event from sidebar button + File Manager toolbar. Project-switch dispatch via 'hermes-project-changed' before location.reload so current xterm state can wind down. Mode trusted-network bypass falls back to /execute-sync (no WebSocket subscription). Open/expanded state persists in localStorage. xterm + fit + search + web-links addons attached. Manual smoke deferred to deploy time."
+  - workflow: "dev-story"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    story: "v3.1-08"
+    title: "Idle timeout default 15min + Playwright E2E + polish"
+    branch: "feature/v3.1-realtime-terminal (direct)"
+    files_touched:
+      - "config/panel.php (session_lifetime default 120 → 15)"
+      - ".env.example (PANEL_SESSION_LIFETIME=15 + idle-timeout comment)"
+      - "README.md (config table + upgrade notes)"
+      - "playwright.config.ts (new)"
+      - "tests/e2e/_setup.ts (panel-reachable + openFloatingTerminal helpers)"
+      - "tests/e2e/terminal-stream.spec.ts (streaming + history E2E)"
+      - "tests/e2e/terminal-reconnect.spec.ts (replay-on-reload E2E)"
+      - "tests/e2e/README.md (run instructions)"
+      - "composer.json (test:e2e script)"
+      - "package.json (@playwright/test devDep)"
+      - "agents.md (new section 15 Sub-project status)"
+    tests:
+      total: 95
+      passed: 95
+      assertions: 197
+    e2e_strategy: "Tests skip gracefully when /up isn't reachable so contributors without a running container don't see false failures. CI is expected to bring up Docker compose before invoking npx playwright test."
+    note: "v3.1 sub-project COMPLETE. Pending decisions MED-3, MED-5, REVERB-AUDIT all closed. Idle timeout 15min replaces the 120min session lifetime; HTTP refreshes the timer, WebSocket messages do not. Trusted-network bypass mode keeps the synchronous fallback path."
+  - workflow: "sprint-close"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    title: "v3.1 real-time terminal sprint complete"
+    stories_completed: 8
+    note: "All 8 stories merged into feature/v3.1-realtime-terminal. Branch ready to merge into main."

@@ -142,7 +142,7 @@ Defaults are embedded in `config/panel.php`.
 | `PANEL_USERNAME`          | `admin`        | Login username (when auth enabled)                                         |
 | `PANEL_PASSWORD`          | —              | Login password and `X-Panel-Password` header value                         |
 | `PANEL_OWNER_NUMBERS`     | `""`           | Comma-separated WhatsApp numbers (with country code, no `+`)               |
-| `PANEL_SESSION_LIFETIME`  | `120`          | Session lifetime in minutes (sliding window)                               |
+| `PANEL_SESSION_LIFETIME`  | `15`           | Idle timeout in minutes (sliding window; HTTP refreshes, WS does not) |
 | `PANEL_PROJECTS_DIR`      | `Project`      | Folder (relative to panel root) holding managed projects                   |
 | `PANEL_DEFAULT_PROJECT`   | —              | Folder name to auto-select on first request when no project is in session  |
 | `PANEL_MAX_UPLOAD_SIZE`   | `10485760`     | File-upload cap in bytes (10 MB by default)                                |
@@ -253,6 +253,19 @@ server {
 > production, `AppServiceProvider` enforces the two-flag rule at boot:
 > auth off without dev-bypass = `RuntimeException` and the panel will
 > not serve traffic.
+
+### Upgrade notes (v3.1)
+
+- Default `PANEL_SESSION_LIFETIME` is now **15 minutes** (was 120). The
+  timer refreshes on every authenticated HTTP request to the panel;
+  WebSocket messages from the real-time terminal do NOT refresh it.
+  Set the value explicitly in your `.env` if you want the previous
+  120-minute behaviour.
+- The synchronous `POST /panel/api/terminal/execute` is now async
+  (returns 202 with a `session_id`). Output streams via the Reverb
+  WebSocket. The legacy synchronous behaviour is preserved at
+  `POST /panel/api/terminal/execute-sync` and used automatically when
+  the panel is in trusted-network bypass mode.
 
 ---
 
