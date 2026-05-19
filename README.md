@@ -434,12 +434,42 @@ HTTP development without a proxy, set `REVERB_HOST=127.0.0.1`,
 values. The `VITE_REVERB_*` block is what `resources/js/echo.js` reads
 at build time to point the browser at the right host/port/scheme.
 
+**API surface**
+
+| Method | Path                                          | Purpose                                            |
+| ------ | --------------------------------------------- | -------------------------------------------------- |
+| GET    | `/panel/api/terminal/state`                   | Snapshot: cwd, display, active session, history    |
+| POST   | `/panel/api/terminal/execute`                 | Async spawn (202 + `session_id`). 30 req/min/IP    |
+| POST   | `/panel/api/terminal/execute-sync`            | Legacy sync execution. Fallback for bypass mode    |
+| POST   | `/panel/api/terminal/{session}/stop`          | SIGTERM → SIGKILL after 5 s grace                  |
+| GET    | `/panel/api/terminal/{session}/replay`        | Buffered chunks (5 min / 512 KB FIFO cap)          |
+| POST   | `/panel/api/terminal/reset`                   | Reset cwd + stop active session                    |
+| DELETE | `/panel/api/terminal/history`                 | Clear per-project command history                  |
+
+Output streams via the private channel `terminal.{project}`. The browser
+listens for `terminal.output` events with payload
+`{session_id, ts, type, data, exit_code?}` where `type` is one of
+`stdout`, `stderr`, `meta`, or `exit`. Synthetic exit codes: `-1` for
+idle/hard-cap timeout, `-2` for orphan reap after panel restart, `-3`
+for graceful shutdown drain.
+
+**Error responses**
+
+| Status | When                                                           |
+| ------ | -------------------------------------------------------------- |
+| 401    | Unauthenticated async execute / state / replay                 |
+| 409    | Session already running for that project (body has `session_id`) |
+| 422    | Command rejected by `TerminalCommandPolicy`, or missing project |
+| 429    | Async execute rate limit exceeded (30/min/IP)                   |
+
 **Status**
 
-v3.1 sub-project is split into 8 stories. As of this README, story 01
-(Reverb install) is the foundation. The streaming UI itself — floating
-panel, xterm.js, output buffering, idle watchdog — lands in subsequent
-stories. See `docs/bmad/stories/v3.1-INDEX.md` for the full breakdown.
+v3.1 sub-project is split into 8 stories. As of this README, stories 01
+through 05 are merged: Reverb installed, command policy extracted,
+session service + cache schema, tick-loop with broadcast, and the HTTP
+API + channel auth. The streaming UI itself — floating panel, xterm.js,
+client-side reconnect/replay — lands in stories 06–07. See
+`docs/bmad/stories/v3.1-INDEX.md` for the full breakdown.
 
 ---
 

@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 1
   stories_created: 8
-  stories_completed: 3
+  stories_completed: 6
   active_sprint: "v3.1"
   sprints:
     - id: "v3.1"
@@ -62,9 +62,9 @@ phase_4_implementation:
         - { id: "v3.1-01", title: "Install Reverb + broadcasting config",          status: "done",  deps: [], commit: "34e9c69" }
         - { id: "v3.1-02", title: "Extract TerminalCommandPolicy",                  status: "done",  deps: [], commit: "52f7e02" }
         - { id: "v3.1-03", title: "TerminalSessionService + cache schema",          status: "done",  deps: ["v3.1-02"] }
-        - { id: "v3.1-04", title: "Tick-loop artisan command + supervisord entry",  status: "ready", deps: ["v3.1-03"] }
-        - { id: "v3.1-05", title: "API contract + controller update",                status: "ready", deps: ["v3.1-03", "v3.1-04"] }
-        - { id: "v3.1-06", title: "Frontend bundle: Alpine npm + Echo + xterm",      status: "ready", deps: ["v3.1-01"] }
+        - { id: "v3.1-04", title: "Tick-loop artisan command + supervisord entry",  status: "done",  deps: ["v3.1-03"] }
+        - { id: "v3.1-05", title: "API contract + controller update",                status: "done",  deps: ["v3.1-03", "v3.1-04"] }
+        - { id: "v3.1-06", title: "Frontend bundle: Alpine npm + Echo + xterm",      status: "done",  deps: ["v3.1-01"] }
         - { id: "v3.1-07", title: "Floating panel UI + Alpine component",            status: "ready", deps: ["v3.1-05", "v3.1-06"] }
         - { id: "v3.1-08", title: "Idle timeout default 15min + polish + E2E",       status: "ready", deps: ["v3.1-07"] }
   umbrella:
@@ -145,12 +145,10 @@ workflow_log:
         details: "Already mitigated by SameSite=lax + HttpOnly + encrypted session. Sufficient for most threat models."
       - id: "REVERB-AUDIT"
         severity: "pending"
+        status: "FIXED"
+        story: "v3.1-05"
         title: "Audit broadcast auth once Reverb is installed"
-        addressed_by: "v3.1-05 (API contract + channel auth + feature tests)"
-        checklist:
-          - "routes/channels.php must gate terminal channel with session('panel_auth') === true"
-          - "BroadcastServiceProvider registered"
-          - "Reverb refuses connection when PANEL_AUTH_ENABLED=true && session not authed"
+        addressed_by: "v3.1-05 (channel callback gates on auth_enabled+dev_bypass and panel_auth session)"
     verdict: "safe to deploy public with HTTPS + reverse proxy. WhatsApp bypass and TerminalService allowlist remain as policy decisions."
   - workflow: "brainstorming"
     date: "2026-05-19"
@@ -245,3 +243,83 @@ workflow_log:
       - "hermes:term:project:{project}       5 min  pointer to current session id"
       - "hermes:term:history:{project}       30 day list of commands, 50 FIFO cap"
     note: "Service is broadcasting-agnostic. Tick-loop in story v3.1-04 will iterate active sessions, drive tick(), and dispatch TerminalOutput events. Bash availability detected at test runtime; tests skip gracefully on hosts without bash."
+  - workflow: "dev-story"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    story: "v3.1-04"
+    title: "Tick-loop artisan command + supervisord entry"
+    branch: "feature/v3.1-realtime-terminal (direct)"
+    files_touched:
+      - "app/Events/TerminalOutput.php (new)"
+      - "app/Console/Commands/TerminalTickLoop.php (new)"
+      - "app/Services/TerminalSessionService.php (active-set tracker, forceExit, reapOrphan, getActive public, hasProcessHandle, tick returns chunks)"
+      - "app/Providers/AppServiceProvider.php (singleton binding)"
+      - "config/logging.php (terminal-tick channel)"
+      - "docker/supervisord.conf (terminal-tick program)"
+      - "tests/Feature/Console/TerminalTickLoopTest.php (new)"
+    tests:
+      total: 81
+      passed: 81
+      assertions: 160
+      new_tests: 5
+      new_assertions: 12
+    runtime_lifecycles:
+      idle_watchdog_seconds: 600
+      hard_cap_seconds: 3600
+      synthetic_exit_codes:
+        idle: -1
+        orphan: -2
+        shutdown: -3
+    note: "Tick-loop owns broadcasting; service stays decoupled. Singleton binding of TerminalSessionService ensures the in-memory Process map survives across artisan invocations during tests. pcntl signal trap degrades gracefully on Windows hosts."
+  - workflow: "dev-story"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    story: "v3.1-05"
+    title: "API contract + controller update + channel auth"
+    branch: "feature/v3.1-realtime-terminal (direct)"
+    files_touched:
+      - "app/Http/Controllers/Panel/TerminalController.php (rewrite)"
+      - "routes/web.php (5 endpoints + throttle)"
+      - "routes/channels.php (terminal channel callback)"
+      - "openspec/changes/realtime-terminal-v31/specs/realtime-terminal/spec.md (new)"
+      - "openspec/changes/realtime-terminal-v31/.openspec.yaml (new)"
+      - "README.md (API surface + error response tables)"
+      - "tests/Feature/Panel/TerminalApiTest.php (new, 11 tests)"
+      - "tests/Feature/Panel/TerminalChannelAuthTest.php (new, 3 tests)"
+    tests:
+      total: 95
+      passed: 95
+      assertions: 197
+      new_tests: 14
+      new_assertions: 37
+    endpoints:
+      - "GET    /panel/api/terminal/state"
+      - "POST   /panel/api/terminal/execute (throttle:30,1)"
+      - "POST   /panel/api/terminal/execute-sync (legacy fallback)"
+      - "POST   /panel/api/terminal/{session}/stop"
+      - "GET    /panel/api/terminal/{session}/replay"
+      - "POST   /panel/api/terminal/reset"
+      - "DELETE /panel/api/terminal/history"
+    closes_pending_decision: "REVERB-AUDIT"
+    note: "OwnerAccess middleware gates async /execute via the existing chain. Channel callback rejects in trusted-network bypass mode and without panel_auth, accepts otherwise with presence data {user: 'panel', project}."
+  - workflow: "dev-story"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    story: "v3.1-06"
+    title: "Frontend bundle: Alpine npm + Echo + xterm + addons"
+    branch: "feature/v3.1-realtime-terminal (direct)"
+    files_touched:
+      - "package.json + package-lock.json (npm install)"
+      - "resources/js/app.js (Alpine npm bundle entry)"
+      - "resources/js/echo.js (new, Reverb broadcaster wiring)"
+      - "resources/js/terminal/index.js (new, Alpine data factory)"
+      - "resources/js/terminal/session.js (new, WS+REST client skeleton)"
+      - "resources/js/terminal/history.js (new, command history navigator)"
+      - "resources/js/terminal/xterm-instance.js (new, xterm factory + addons)"
+      - "resources/views/panel/layout.blade.php (drop CDN Alpine; @vite app.js)"
+    bundle_sizes:
+      app_js_raw_kb: 373.33
+      app_js_gzipped_kb: 104.30
+      target_gzipped_kb: 250
+      target_met: true
+    note: "Skeleton-only modules per story: hermesTerminal() Alpine factory exposes state shape, TerminalSession exposes async fetch/execute/stop/replay, TerminalHistory holds up/down arrow logic, createXtermInstance() builds xterm + 3 addons themed to match panel design tokens. Story v3.1-07 will mount xterm into DOM, wire keyboard shortcuts, and finish UI behaviour."

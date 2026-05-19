@@ -72,6 +72,13 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'terminal-tick' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/terminal-tick.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'replace_placeholders' => true,
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
