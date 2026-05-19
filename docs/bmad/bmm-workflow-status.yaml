@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 1
   stories_created: 8
-  stories_completed: 3
+  stories_completed: 4
   active_sprint: "v3.1"
   sprints:
     - id: "v3.1"
@@ -62,7 +62,7 @@ phase_4_implementation:
         - { id: "v3.1-01", title: "Install Reverb + broadcasting config",          status: "done",  deps: [], commit: "34e9c69" }
         - { id: "v3.1-02", title: "Extract TerminalCommandPolicy",                  status: "done",  deps: [], commit: "52f7e02" }
         - { id: "v3.1-03", title: "TerminalSessionService + cache schema",          status: "done",  deps: ["v3.1-02"] }
-        - { id: "v3.1-04", title: "Tick-loop artisan command + supervisord entry",  status: "ready", deps: ["v3.1-03"] }
+        - { id: "v3.1-04", title: "Tick-loop artisan command + supervisord entry",  status: "done",  deps: ["v3.1-03"] }
         - { id: "v3.1-05", title: "API contract + controller update",                status: "ready", deps: ["v3.1-03", "v3.1-04"] }
         - { id: "v3.1-06", title: "Frontend bundle: Alpine npm + Echo + xterm",      status: "ready", deps: ["v3.1-01"] }
         - { id: "v3.1-07", title: "Floating panel UI + Alpine component",            status: "ready", deps: ["v3.1-05", "v3.1-06"] }
@@ -245,3 +245,31 @@ workflow_log:
       - "hermes:term:project:{project}       5 min  pointer to current session id"
       - "hermes:term:history:{project}       30 day list of commands, 50 FIFO cap"
     note: "Service is broadcasting-agnostic. Tick-loop in story v3.1-04 will iterate active sessions, drive tick(), and dispatch TerminalOutput events. Bash availability detected at test runtime; tests skip gracefully on hosts without bash."
+  - workflow: "dev-story"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    story: "v3.1-04"
+    title: "Tick-loop artisan command + supervisord entry"
+    branch: "feature/v3.1-realtime-terminal (direct)"
+    files_touched:
+      - "app/Events/TerminalOutput.php (new)"
+      - "app/Console/Commands/TerminalTickLoop.php (new)"
+      - "app/Services/TerminalSessionService.php (active-set tracker, forceExit, reapOrphan, getActive public, hasProcessHandle, tick returns chunks)"
+      - "app/Providers/AppServiceProvider.php (singleton binding)"
+      - "config/logging.php (terminal-tick channel)"
+      - "docker/supervisord.conf (terminal-tick program)"
+      - "tests/Feature/Console/TerminalTickLoopTest.php (new)"
+    tests:
+      total: 81
+      passed: 81
+      assertions: 160
+      new_tests: 5
+      new_assertions: 12
+    runtime_lifecycles:
+      idle_watchdog_seconds: 600
+      hard_cap_seconds: 3600
+      synthetic_exit_codes:
+        idle: -1
+        orphan: -2
+        shutdown: -3
+    note: "Tick-loop owns broadcasting; service stays decoupled. Singleton binding of TerminalSessionService ensures the in-memory Process map survives across artisan invocations during tests. pcntl signal trap degrades gracefully on Windows hosts."
