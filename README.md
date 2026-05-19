@@ -142,7 +142,7 @@ Defaults are embedded in `config/panel.php`.
 | `PANEL_USERNAME`          | `admin`        | Login username (when auth enabled)                                         |
 | `PANEL_PASSWORD`          | —              | Login password and `X-Panel-Password` header value                         |
 | `PANEL_OWNER_NUMBERS`     | `""`           | Comma-separated WhatsApp numbers (with country code, no `+`)               |
-| `PANEL_SESSION_LIFETIME`  | `120`          | Session lifetime in minutes (sliding window)                               |
+| `PANEL_SESSION_LIFETIME`  | `15`           | Idle timeout in minutes (sliding window; HTTP refreshes, WS does not) |
 | `PANEL_PROJECTS_DIR`      | `Project`      | Folder (relative to panel root) holding managed projects                   |
 | `PANEL_DEFAULT_PROJECT`   | —              | Folder name to auto-select on first request when no project is in session  |
 | `PANEL_MAX_UPLOAD_SIZE`   | `10485760`     | File-upload cap in bytes (10 MB by default)                                |
@@ -253,6 +253,19 @@ server {
 > production, `AppServiceProvider` enforces the two-flag rule at boot:
 > auth off without dev-bypass = `RuntimeException` and the panel will
 > not serve traffic.
+
+### Upgrade notes (v3.1)
+
+- Default `PANEL_SESSION_LIFETIME` is now **15 minutes** (was 120). The
+  timer refreshes on every authenticated HTTP request to the panel;
+  WebSocket messages from the real-time terminal do NOT refresh it.
+  Set the value explicitly in your `.env` if you want the previous
+  120-minute behaviour.
+- The synchronous `POST /panel/api/terminal/execute` is now async
+  (returns 202 with a `session_id`). Output streams via the Reverb
+  WebSocket. The legacy synchronous behaviour is preserved at
+  `POST /panel/api/terminal/execute-sync` and used automatically when
+  the panel is in trusted-network bypass mode.
 
 ---
 
@@ -434,12 +447,42 @@ HTTP development without a proxy, set `REVERB_HOST=127.0.0.1`,
 values. The `VITE_REVERB_*` block is what `resources/js/echo.js` reads
 at build time to point the browser at the right host/port/scheme.
 
+**API surface**
+
+| Method | Path                                          | Purpose                                            |
+| ------ | --------------------------------------------- | -------------------------------------------------- |
+| GET    | `/panel/api/terminal/state`                   | Snapshot: cwd, display, active session, history    |
+| POST   | `/panel/api/terminal/execute`                 | Async spawn (202 + `session_id`). 30 req/min/IP    |
+| POST   | `/panel/api/terminal/execute-sync`            | Legacy sync execution. Fallback for bypass mode    |
+| POST   | `/panel/api/terminal/{session}/stop`          | SIGTERM → SIGKILL after 5 s grace                  |
+| GET    | `/panel/api/terminal/{session}/replay`        | Buffered chunks (5 min / 512 KB FIFO cap)          |
+| POST   | `/panel/api/terminal/reset`                   | Reset cwd + stop active session                    |
+| DELETE | `/panel/api/terminal/history`                 | Clear per-project command history                  |
+
+Output streams via the private channel `terminal.{project}`. The browser
+listens for `terminal.output` events with payload
+`{session_id, ts, type, data, exit_code?}` where `type` is one of
+`stdout`, `stderr`, `meta`, or `exit`. Synthetic exit codes: `-1` for
+idle/hard-cap timeout, `-2` for orphan reap after panel restart, `-3`
+for graceful shutdown drain.
+
+**Error responses**
+
+| Status | When                                                           |
+| ------ | -------------------------------------------------------------- |
+| 401    | Unauthenticated async execute / state / replay                 |
+| 409    | Session already running for that project (body has `session_id`) |
+| 422    | Command rejected by `TerminalCommandPolicy`, or missing project |
+| 429    | Async execute rate limit exceeded (30/min/IP)                   |
+
 **Status**
 
-v3.1 sub-project is split into 8 stories. As of this README, story 01
-(Reverb install) is the foundation. The streaming UI itself — floating
-panel, xterm.js, output buffering, idle watchdog — lands in subsequent
-stories. See `docs/bmad/stories/v3.1-INDEX.md` for the full breakdown.
+v3.1 sub-project is split into 8 stories. As of this README, stories 01
+through 05 are merged: Reverb installed, command policy extracted,
+session service + cache schema, tick-loop with broadcast, and the HTTP
+API + channel auth. The streaming UI itself — floating panel, xterm.js,
+client-side reconnect/replay — lands in stories 06–07. See
+`docs/bmad/stories/v3.1-INDEX.md` for the full breakdown.
 
 ---
 

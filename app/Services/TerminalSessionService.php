@@ -36,6 +36,10 @@ class TerminalSessionService
     /** History TTL — survives panel restarts and idle days. */
     public const HISTORY_TTL = 30 * 24 * 60 * 60;   // 30 days
 
+    /** Active-set tracker TTL. Refreshed on every chunk write so it survives
+     *  as long as any active session does. */
+    public const ACTIVE_SET_TTL = 300;
+
     /** FIFO cap on the per-session output buffer. */
     public const BUFFER_BYTES_CAP = 512 * 1024;
 
@@ -100,6 +104,7 @@ class TerminalSessionService
         $this->putActive($session);
         $this->setProjectPointer($project, $sessionId);
         $this->resetBuffer($sessionId);
+        $this->trackActive($sessionId);
         $this->appendChunk($sessionId, [
             'ts' => $now,
             'type' => 'meta',
@@ -152,13 +157,19 @@ class TerminalSessionService
      * nothing changed.
      *
      * Detects process exit and finalises the buffer with an `exit` chunk.
+     *
+     * Returns the chunks produced this tick (stdout / stderr / exit
+     * synthetic) so the tick-loop can dispatch broadcast events without
+     * coupling the service to broadcasting.
+     *
+     * @return array<int, array{ts:int,type:string,data:string,exit_code?:int}>
      */
-    public function tick(string $sessionId): void
+    public function tick(string $sessionId): array
     {
         $session = $this->getActive($sessionId);
 
         if (! $session || $session->status === 'done') {
-            return;
+            return [];
         }
 
         $process = $this->processes[$sessionId] ?? null;
@@ -168,21 +179,26 @@ class TerminalSessionService
             // Still touch the active key so its TTL doesn't expire.
             $this->putActive($session);
 
-            return;
+            return [];
         }
 
+        $produced = [];
         $stdout = $process->getIncrementalOutput();
         $stderr = $process->getIncrementalErrorOutput();
         $now = $this->now();
         $touched = false;
 
         if ($stdout !== '') {
-            $this->appendChunk($sessionId, ['ts' => $now, 'type' => 'stdout', 'data' => $stdout]);
+            $chunk = ['ts' => $now, 'type' => 'stdout', 'data' => $stdout];
+            $this->appendChunk($sessionId, $chunk);
+            $produced[] = $chunk;
             $touched = true;
         }
 
         if ($stderr !== '') {
-            $this->appendChunk($sessionId, ['ts' => $now, 'type' => 'stderr', 'data' => $stderr]);
+            $chunk = ['ts' => $now, 'type' => 'stderr', 'data' => $stderr];
+            $this->appendChunk($sessionId, $chunk);
+            $produced[] = $chunk;
             $touched = true;
         }
 
@@ -196,17 +212,22 @@ class TerminalSessionService
 
         if (! $process->isRunning()) {
             $exitCode = (int) ($process->getExitCode() ?? 0);
-            $this->appendChunk($sessionId, [
+            $exitChunk = [
                 'ts' => $this->now(),
                 'type' => 'exit',
                 'data' => sprintf("[exit %d]\n", $exitCode),
                 'exit_code' => $exitCode,
-            ]);
+            ];
+            $this->appendChunk($sessionId, $exitChunk);
+            $produced[] = $exitChunk;
 
             $this->putActive($session->withStatus('done', $exitCode));
             $this->pushHistory($session->project, $session->command, $exitCode);
+            $this->untrackActive($sessionId);
             unset($this->processes[$sessionId]);
         }
+
+        return $produced;
     }
 
     /**
@@ -236,6 +257,7 @@ class TerminalSessionService
 
         $this->cache->forget($this->activeKey($sessionId));
         $this->cache->forget($this->bufferKey($sessionId));
+        $this->untrackActive($sessionId);
 
         if ($session && $this->getProjectPointer($session->project) === $sessionId) {
             $this->cache->forget($this->projectKey($session->project));
@@ -298,6 +320,121 @@ class TerminalSessionService
     }
 
     /**
+     * Forcefully terminate a session, emitting a synthetic exit chunk
+     * with the supplied code and reason. Used by the tick-loop to
+     * enforce idle (-1), hard cap (-1), shutdown (-3) lifecycles.
+     *
+     * Returns the synthetic exit chunk for the caller to broadcast.
+     *
+     * @return array{ts:int,type:string,data:string,exit_code:int}|null
+     */
+    public function forceExit(string $sessionId, int $exitCode, string $reason): ?array
+    {
+        $session = $this->getActive($sessionId);
+
+        if (! $session || $session->status === 'done') {
+            // Already gone — just clean tracker if present.
+            $this->untrackActive($sessionId);
+
+            return null;
+        }
+
+        $process = $this->processes[$sessionId] ?? null;
+
+        if ($process instanceof Process && $process->isRunning()) {
+            $process->signal(15);    // SIGTERM
+            // Don't wait synchronously — the next tick will reap.
+        } elseif ($session->pid > 0 && function_exists('posix_kill')) {
+            @posix_kill($session->pid, 15);
+        }
+
+        $chunk = [
+            'ts' => $this->now(),
+            'type' => 'exit',
+            'data' => $reason,
+            'exit_code' => $exitCode,
+        ];
+        $this->appendChunk($sessionId, $chunk);
+
+        $this->putActive($session->withStatus('done', $exitCode));
+        $this->pushHistory($session->project, $session->command, $exitCode);
+        $this->untrackActive($sessionId);
+        unset($this->processes[$sessionId]);
+
+        return $chunk;
+    }
+
+    /**
+     * Reap a session whose PID has already vanished (e.g. after a panel
+     * restart). Appends a synthetic exit chunk so reconnecting clients
+     * see the dead session ended cleanly.
+     *
+     * @return array{ts:int,type:string,data:string,exit_code:int}|null
+     */
+    public function reapOrphan(string $sessionId): ?array
+    {
+        $session = $this->getActive($sessionId);
+
+        if (! $session) {
+            $this->untrackActive($sessionId);
+
+            return null;
+        }
+
+        $chunk = [
+            'ts' => $this->now(),
+            'type' => 'exit',
+            'data' => "[orphaned, panel restarted]\n",
+            'exit_code' => -2,
+        ];
+        $this->appendChunk($sessionId, $chunk);
+
+        $this->putActive($session->withStatus('done', -2));
+        $this->pushHistory($session->project, $session->command, -2);
+        $this->untrackActive($sessionId);
+        unset($this->processes[$sessionId]);
+
+        return $chunk;
+    }
+
+    /**
+     * Whether we have a Process handle for this session in our in-memory
+     * map. The boot sweep needs this to distinguish:
+     *   - true orphans (PID dead, no handle)        → reap
+     *   - just-exited sessions in our own map        → let tick() drain
+     *
+     * The map is private state of this PHP worker; a fresh tick-loop
+     * boot starts with an empty map, so any cached active key from a
+     * previous run is genuinely orphan-eligible.
+     */
+    public function hasProcessHandle(string $sessionId): bool
+    {
+        return isset($this->processes[$sessionId]);
+    }
+
+    /**
+     * List session ids that are currently tracked as active.
+     *
+     * Used by the tick-loop (story v3.1-04) to iterate live sessions
+     * without relying on cache key scanning (file/array stores don't
+     * expose `keys()`). The set is best-effort: stop/destroy/exit each
+     * untrack their session, but a hard panel crash can leave entries
+     * pointing at vanished active keys. Callers must verify each id
+     * with `getActive()` and reap stale entries via `untrackActive()`.
+     *
+     * @return array<int, string>
+     */
+    public function listActiveSessionIds(): array
+    {
+        $ids = (array) $this->cache->get($this->activeSetKey(), []);
+
+        return array_values(array_unique(array_filter(
+            $ids,
+            fn ($id) => is_string($id) && $id !== '',
+        )));
+    }
+
+    /**
      * Build the Symfony Process. Wrapped here so tests can override.
      */
     protected function buildProcess(string $command, string $cwd): Process
@@ -348,9 +485,14 @@ class TerminalSessionService
             $session->toArray(),
             self::ACTIVE_TTL,
         );
+        $this->trackActive($session->sessionId);
     }
 
-    protected function getActive(string $sessionId): ?TerminalSession
+    /**
+     * Public accessor for active metadata. Returns null when the
+     * session is unknown or already destroyed.
+     */
+    public function getActive(string $sessionId): ?TerminalSession
     {
         $data = $this->cache->get($this->activeKey($sessionId));
 
@@ -416,5 +558,43 @@ class TerminalSessionService
     protected function historyKey(string $project): string
     {
         return "hermes:term:history:{$project}";
+    }
+
+    protected function activeSetKey(): string
+    {
+        return 'hermes:term:active-set';
+    }
+
+    /**
+     * Add a session id to the active-set tracker. Idempotent. Refreshes
+     * TTL to keep the set alive as long as we keep writing.
+     */
+    public function trackActive(string $sessionId): void
+    {
+        $set = (array) $this->cache->get($this->activeSetKey(), []);
+
+        if (! in_array($sessionId, $set, true)) {
+            $set[] = $sessionId;
+        }
+
+        $this->cache->put($this->activeSetKey(), $set, self::ACTIVE_SET_TTL);
+    }
+
+    /**
+     * Remove a session id from the active-set tracker. Used when a
+     * session ends or a stale entry is reaped.
+     */
+    public function untrackActive(string $sessionId): void
+    {
+        $set = (array) $this->cache->get($this->activeSetKey(), []);
+        $set = array_values(array_filter($set, fn ($id) => $id !== $sessionId));
+
+        if ($set === []) {
+            $this->cache->forget($this->activeSetKey());
+
+            return;
+        }
+
+        $this->cache->put($this->activeSetKey(), $set, self::ACTIVE_SET_TTL);
     }
 }

@@ -30,7 +30,7 @@ return [
 
     'password' => env('PANEL_PASSWORD', ''),
 
-    'session_lifetime' => (int) env('PANEL_SESSION_LIFETIME', 120),
+    'session_lifetime' => (int) env('PANEL_SESSION_LIFETIME', 15),
 
     /*
     |--------------------------------------------------------------------------

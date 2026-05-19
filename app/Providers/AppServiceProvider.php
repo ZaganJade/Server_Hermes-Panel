@@ -3,6 +3,9 @@
 namespace App\Providers;
 
 use App\Services\ProjectService;
+use App\Services\TerminalCommandPolicy;
+use App\Services\TerminalSessionService;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -13,7 +16,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // TerminalSessionService keeps in-memory state for active processes
+        // (the Symfony Process objects). It MUST be a singleton inside the
+        // tick-loop or the Process map gets recreated and the loop loses
+        // its handles. Same reasoning when called from feature tests.
+        $this->app->singleton(TerminalSessionService::class, fn ($app) => new TerminalSessionService(
+            $app->make(CacheRepository::class),
+            $app->make(TerminalCommandPolicy::class),
+        ));
     }
 
     /**

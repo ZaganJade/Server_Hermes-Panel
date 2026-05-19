@@ -648,3 +648,37 @@ These require explicit user approval before executing:
 - Edit code on a feature branch
 - Create new BMAD stories under `docs/bmad/stories/`
 - Update BMAD artifacts via BMAD commands
+
+---
+
+## 15. Sub-project status
+
+Live snapshot for AI agents picking up work mid-stream. Update on every
+sprint close.
+
+### v3.1 — Real-time terminal: **DONE**
+
+- Design: `docs/superpowers/specs/2026-05-19-realtime-terminal-design.md`
+- Capability spec: `openspec/changes/realtime-terminal-v31/specs/realtime-terminal/spec.md`
+- Stories: `docs/bmad/stories/v3.1-INDEX.md` (all 8 merged)
+- Status:
+  - `v3.1-01` Reverb + broadcasting wiring
+  - `v3.1-02` `TerminalCommandPolicy` extracted, blocklist tightened
+  - `v3.1-03` `TerminalSessionService` + cache schema
+  - `v3.1-04` `hermes:terminal-tick` artisan + supervisord + watchdogs
+  - `v3.1-05` API contract + channel auth + OpenSpec
+  - `v3.1-06` Frontend bundle (Alpine npm + Echo + xterm)
+  - `v3.1-07` Floating panel UI + File Manager terminal removal
+  - `v3.1-08` Idle timeout 15min default + Playwright E2E + polish
+
+### v3.2 — VPS monitoring: backlog
+
+Not yet brainstormed. Trigger `/brainstorm` when starting.
+
+### v3.3 — Multi-language project layer: backlog
+
+Discovery beyond Laravel (Node, Python, Go, mobile). Trigger `/brainstorm`.
+
+### v3.4 — Server admin (aaPanel-lite): backlog
+
+Nginx vhost, Let's Encrypt, cron, backup. Trigger `/brainstorm`.

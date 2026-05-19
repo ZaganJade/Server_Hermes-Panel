@@ -47,7 +47,7 @@
                     <input type="file" class="hidden" multiple @change="uploadFiles($event)">
                 </label>
                 <button x-show="selectedItem" @click="downloadCurrent" class="btn-mini" title="Unduh">↓ Unduh</button>
-                <button @click="toggleTerminal" class="btn-mini" :class="showTerminal ? 'border-copper text-copper' : ''" title="Terminal">
+                <button @click="$dispatch('hermes-terminal-toggle')" class="btn-mini" title="Terminal">
                     <span class="font-serif italic text-base leading-none">_</span> Terminal
                 </button>
             </div>
@@ -173,85 +173,6 @@
         </template>
     </div>
 
-    <!-- Terminal -->
-    <div x-show="showTerminal" x-cloak class="border-t border-[color:var(--rule-strong)] bg-ink" style="height: 320px;">
-        <!-- Header -->
-        <div class="flex items-center justify-between px-6 py-2.5 border-b border-[color:var(--rule)] bg-ink-soft">
-            <span class="font-mono text-[10px] tracking-[0.22em] uppercase text-copper flex items-center gap-2">
-                <span class="pulse-dot"></span>
-                <span>Terminal</span>
-                <span class="text-paper-dim" x-text="'· ' + termDisplay"></span>
-            </span>
-            <div class="flex items-center gap-3">
-                <button @click="resetTerminal()" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-copper transition-colors" title="Reset cwd">⟲ Reset</button>
-                <button @click="clearTerminal()" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-copper transition-colors" title="Bersihkan layar">␡ Bersihkan</button>
-                <button @click="showTerminal = false" class="font-serif italic text-base leading-none text-paper-dim hover:text-[color:var(--rust)]">✕</button>
-            </div>
-        </div>
-
-        <!-- Output -->
-        <div x-ref="termOutput" class="font-mono text-[12px] text-paper-soft px-6 py-3 overflow-y-auto leading-relaxed" style="height: calc(320px - 86px);">
-            <!-- Welcome -->
-            <div x-show="termHistory.length === 0" class="text-paper-dim italic font-serif">
-                <span class="text-copper not-italic font-mono text-[10px] tracking-[0.22em] uppercase">// Hermes Terminal</span><br>
-                Ketik perintah dan tekan Enter. Gunakan <code class="text-copper not-italic">cd</code> untuk pindah direktori,
-                <code class="text-copper not-italic">clear</code> untuk membersihkan layar.
-            </div>
-
-            <template x-for="(entry, i) in termHistory" :key="i">
-                <div class="mb-2">
-                    <!-- Prompt + command -->
-                    <div class="flex items-baseline gap-2">
-                        <span class="text-copper select-none">
-                            <span class="font-serif italic">ψ</span>
-                            <span x-text="entry.cwd" class="text-paper-dim ml-1"></span>
-                            <span class="text-copper ml-1">›</span>
-                        </span>
-                        <span class="text-paper" x-text="entry.command"></span>
-                    </div>
-                    <!-- Output -->
-                    <pre x-show="entry.output" class="whitespace-pre-wrap text-paper-soft pl-4" x-text="entry.output"></pre>
-                    <pre x-show="entry.error" class="whitespace-pre-wrap text-[color:var(--rust)] pl-4" x-text="entry.error"></pre>
-                    <div x-show="entry.exitCode !== 0 && !entry.error" class="text-[color:var(--rust)] pl-4 text-[10px] tracking-wider uppercase">
-                        → keluar dengan kode <span x-text="entry.exitCode"></span>
-                    </div>
-                </div>
-            </template>
-
-            <!-- Running -->
-            <div x-show="termRunning" class="flex items-baseline gap-2 text-paper-dim italic">
-                <span class="text-copper">
-                    <span class="font-serif italic">ψ</span>
-                    <span x-text="termDisplay" class="text-paper-dim ml-1"></span>
-                    <span class="text-copper ml-1">›</span>
-                </span>
-                <span x-text="termCurrentCommand"></span>
-                <span class="animate-pulse text-copper">█</span>
-            </div>
-        </div>
-
-        <!-- Input -->
-        <div class="flex items-baseline gap-2 px-6 py-2.5 border-t border-[color:var(--rule)] bg-ink-soft font-mono text-[12px]">
-            <span class="text-copper select-none shrink-0">
-                <span class="font-serif italic">ψ</span>
-                <span x-text="termDisplay" class="text-paper-dim ml-1"></span>
-                <span class="text-copper ml-1">›</span>
-            </span>
-            <input type="text"
-                   x-model="termInput"
-                   x-ref="termInput"
-                   @keydown.enter="runTerminalCommand()"
-                   @keydown.up.prevent="recallHistory(-1)"
-                   @keydown.down.prevent="recallHistory(1)"
-                   @keydown.tab.prevent=""
-                   :disabled="termRunning"
-                   placeholder="ketik perintah..."
-                   autocomplete="off"
-                   spellcheck="false"
-                   class="flex-1 bg-transparent border-none focus:outline-none text-paper placeholder:text-paper-dim/50 placeholder:italic font-mono">
-        </div>
-    </div>
-
     <!-- New File Modal -->
     <div x-show="showNewFile" x-cloak class="modal-overlay" @click.self="showNewFile = false; newItemName = ''">
         <div class="modal-card" style="max-width: 480px;">
@@ -326,18 +247,14 @@ function fileApp(initialPath) {
     return {
         currentPath: initialPath, directories: [], files: [], breadcrumbs: [],
         loading: false, selectedItem: null,
-        showNewFile: false, showNewFolder: false, showEditor: false, showTerminal: false,
+        showNewFile: false, showNewFolder: false, showEditor: false,
         newItemName: '', editingFile: null, editingContent: '', saving: false,
         searchQuery: '', searchRecursive: false, searchResults: [],
-        // Terminal state
-        termInput: '', termCurrentCommand: '', termHistory: [], termCmdHistory: [], termHistoryIndex: -1,
-        termCwd: '', termDisplay: '~', termRunning: false,
         windowWidth: window.innerWidth,
         csrf: document.querySelector('meta[name="csrf-token"]')?.content || '',
 
         init() {
             this.loadFiles(initialPath);
-            this.loadTerminalState();
             window.addEventListener('resize', () => { this.windowWidth = window.innerWidth; });
         },
 
@@ -452,118 +369,6 @@ function fileApp(initialPath) {
                 this.searchResults = data.results || [];
             } catch(e) { this.searchResults = []; }
         },
-
-        toggleTerminal() {
-            this.showTerminal = !this.showTerminal;
-            if (this.showTerminal) {
-                this.$nextTick(() => this.$refs.termInput?.focus());
-            }
-        },
-
-        async loadTerminalState() {
-            try {
-                const res = await fetch('{{ route("panel.api.terminal-state") }}', {
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                });
-                const data = await res.json();
-                this.termCwd = data.cwd;
-                this.termDisplay = data.display;
-            } catch (e) {}
-        },
-
-        async runTerminalCommand() {
-            const cmd = this.termInput.trim();
-            if (!cmd || this.termRunning) return;
-
-            this.termCurrentCommand = cmd;
-            this.termRunning = true;
-            this.termInput = '';
-
-            // Track command history (for arrow up/down)
-            this.termCmdHistory.push(cmd);
-            if (this.termCmdHistory.length > 50) this.termCmdHistory.shift();
-            this.termHistoryIndex = this.termCmdHistory.length;
-
-            const promptCwd = this.termDisplay;
-
-            try {
-                const res = await fetch('{{ route("panel.api.terminal-execute") }}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf },
-                    body: JSON.stringify({ command: cmd })
-                });
-                const data = await res.json();
-
-                // Special: clear screen
-                if (data.clear) {
-                    this.termHistory = [];
-                } else {
-                    this.termHistory.push({
-                        command: cmd,
-                        cwd: promptCwd,
-                        output: data.output || '',
-                        error: data.error || '',
-                        exitCode: data.exit_code ?? 0,
-                    });
-                }
-
-                this.termCwd = data.cwd;
-                this.termDisplay = data.display;
-
-                // If `cd` succeeded and panel is browsing the project, refresh file listing
-                if (cmd.startsWith('cd ') || cmd === 'cd') {
-                    // Optionally sync file panel — skip to keep them independent
-                }
-            } catch (e) {
-                this.termHistory.push({
-                    command: cmd,
-                    cwd: promptCwd,
-                    output: '',
-                    error: '[hermes] permintaan gagal\n',
-                    exitCode: 1,
-                });
-            }
-
-            this.termRunning = false;
-            this.termCurrentCommand = '';
-
-            this.$nextTick(() => {
-                const out = this.$refs.termOutput;
-                if (out) out.scrollTop = out.scrollHeight;
-                this.$refs.termInput?.focus();
-            });
-        },
-
-        recallHistory(direction) {
-            if (this.termCmdHistory.length === 0) return;
-            this.termHistoryIndex += direction;
-            if (this.termHistoryIndex < 0) this.termHistoryIndex = 0;
-            if (this.termHistoryIndex >= this.termCmdHistory.length) {
-                this.termHistoryIndex = this.termCmdHistory.length;
-                this.termInput = '';
-                return;
-            }
-            this.termInput = this.termCmdHistory[this.termHistoryIndex] || '';
-        },
-
-        clearTerminal() {
-            this.termHistory = [];
-            this.$refs.termInput?.focus();
-        },
-
-        async resetTerminal() {
-            try {
-                const res = await fetch('{{ route("panel.api.terminal-reset") }}', {
-                    method: 'POST',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf }
-                });
-                const data = await res.json();
-                this.termCwd = data.cwd;
-                this.termDisplay = data.display;
-                showToast('Cwd direset ke proyek aktif');
-            } catch (e) { showToast('Gagal reset', 'error'); }
-            this.$refs.termInput?.focus();
-        }
     };
 }
 </script>

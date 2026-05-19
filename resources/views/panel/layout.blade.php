@@ -4,10 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    @php
+        $hermesActiveProject = $activeProject['name'] ?? $activeProject['folder'] ?? '';
+        $hermesAuthBypass = !config('panel.auth_enabled', true) && config('panel.dev_bypass', false);
+    @endphp
+    <meta name="hermes-active-project" content="{{ $hermesActiveProject }}">
+    <meta name="hermes-auth-bypass" content="{{ $hermesAuthBypass ? '1' : '0' }}">
     <title>{{ config('panel.name') }} — @yield('title', 'Panel')</title>
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6/css/all.min.css">
-    @vite(['resources/css/app.css'])
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen relative">
 
@@ -129,6 +134,17 @@
             @endforeach
         </nav>
         <div class="px-7 py-5 border-t border-[color:var(--rule)]">
+            <button type="button"
+                    @click="$dispatch('hermes-terminal-toggle')"
+                    class="w-full flex items-center justify-between gap-3 px-3 py-2 mb-3 border border-[color:var(--rule)] hover:border-[color:var(--copper)] transition-colors"
+                    title="Toggle terminal">
+                <span class="flex items-center gap-3">
+                    <span class="glyph text-base text-copper leading-none" x-text="$store.hermesTerminalStatus?.glyph || '◌'"></span>
+                    <span class="font-mono text-[10px] tracking-[0.22em] uppercase text-paper-soft">Terminal</span>
+                </span>
+                <span class="font-mono text-[9px] tracking-[0.18em] uppercase text-paper-dim"
+                      x-text="$store.hermesTerminalStatus?.label || 'idle'"></span>
+            </button>
             @if(config('panel.auth_enabled', false))
             <form method="POST" action="{{ route('panel.logout') }}">
                 @csrf
@@ -209,6 +225,8 @@
 
     @stack('scripts')
 
+    @include('panel._terminal')
+
     <script>
         function panelApp() {
             return {
@@ -223,8 +241,13 @@
                 headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': csrf },
                 body: JSON.stringify({ project: projectName })
             }).then(r => r.json()).then(data => {
-                if (data.success) location.reload();
-                else if (window.showToast) window.showToast(data.error || 'Switch gagal', 'error');
+                if (data.success) {
+                    // Notify the floating terminal so it can swap subscription before the reload.
+                    window.dispatchEvent(new CustomEvent('hermes-project-changed', { detail: { project: projectName } }));
+                    location.reload();
+                } else if (window.showToast) {
+                    window.showToast(data.error || 'Switch gagal', 'error');
+                }
             });
         }
     </script>
