@@ -26,7 +26,10 @@ Route::get('/', [LandingController::class, 'index'])->name('landing');
 
 Route::prefix('panel')->name('panel.')->group(function () {
     Route::get('/login', [AuthController::class, 'login'])->name('login')->withoutMiddleware('owner.access');
-    Route::post('/login', [AuthController::class, 'authenticate'])->name('authenticate')->withoutMiddleware('owner.access');
+    Route::post('/login', [AuthController::class, 'authenticate'])
+        ->name('authenticate')
+        ->middleware('throttle:10,1')
+        ->withoutMiddleware('owner.access');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 });
 

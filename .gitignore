@@ -7,6 +7,7 @@
 .phpunit.result.cache
 /.codex
 /.cursor/
+.pi
 /.idea
 /.nova
 /.phpunit.cache
@@ -28,3 +29,12 @@ Thumbs.db
 DATABASE-INLINE-EDIT-PLAN.md
 Project
 project/
+
+# pi runtime artifacts (not source-of-truth, varies per machine/session)
+.pi/sessions/
+.pi/run-history.jsonl
+.pi/cache/
+.pi/auth.json
+
+# Superpowers runtime
+.superpowers/

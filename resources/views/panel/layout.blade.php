@@ -77,6 +77,7 @@
         <!-- Bottom Controls -->
         <div class="px-7 py-5 border-t border-[color:var(--rule)] flex items-center justify-between">
             <span class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim">{{ date('Y.m.d') }}</span>
+            @if(config('panel.auth_enabled', false))
             <form method="POST" action="{{ route('panel.logout') }}" class="inline">
                 @csrf
                 <button type="submit"
@@ -84,6 +85,9 @@
                     Keluar <span class="font-serif italic text-base leading-none">↗</span>
                 </button>
             </form>
+            @else
+            <span class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim" title="Trusted-network mode — PANEL_AUTH_ENABLED=false">Open</span>
+            @endif
         </div>
     </aside>
 
@@ -125,10 +129,14 @@
             @endforeach
         </nav>
         <div class="px-7 py-5 border-t border-[color:var(--rule)]">
+            @if(config('panel.auth_enabled', false))
             <form method="POST" action="{{ route('panel.logout') }}">
                 @csrf
                 <button type="submit" class="font-mono text-[10px] tracking-[0.22em] uppercase text-rust">Keluar →</button>
             </form>
+            @else
+            <span class="font-mono text-[10px] tracking-[0.22em] uppercase text-paper-dim">Mode terbuka · jaringan terpercaya</span>
+            @endif
         </div>
     </aside>
 
