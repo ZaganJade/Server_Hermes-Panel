@@ -82,6 +82,8 @@ Route::prefix('panel')->name('panel.')->middleware('owner.access')->group(functi
     Route::post('/api/queue/restart', [ToolController::class, 'queueRestart'])->name('api.queue-restart');
     Route::post('/api/queue/flush', [ToolController::class, 'queueFlush'])->name('api.queue-flush');
     Route::post('/api/composer', [ToolController::class, 'runComposer'])->name('api.composer');
+    Route::get('/api/seeders', [ToolController::class, 'listSeeders'])->name('api.seeders');
+    Route::post('/api/db-seed', [ToolController::class, 'dbSeed'])->name('api.db-seed');
     Route::post('/api/npm', [ToolController::class, 'runNpm'])->name('api.npm');
 
     // AJAX: Terminal
