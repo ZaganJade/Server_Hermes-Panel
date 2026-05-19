@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 1
   stories_created: 8
-  stories_completed: 6
+  stories_completed: 7
   active_sprint: "v3.1"
   sprints:
     - id: "v3.1"
@@ -65,7 +65,7 @@ phase_4_implementation:
         - { id: "v3.1-04", title: "Tick-loop artisan command + supervisord entry",  status: "done",  deps: ["v3.1-03"] }
         - { id: "v3.1-05", title: "API contract + controller update",                status: "done",  deps: ["v3.1-03", "v3.1-04"] }
         - { id: "v3.1-06", title: "Frontend bundle: Alpine npm + Echo + xterm",      status: "done",  deps: ["v3.1-01"] }
-        - { id: "v3.1-07", title: "Floating panel UI + Alpine component",            status: "ready", deps: ["v3.1-05", "v3.1-06"] }
+        - { id: "v3.1-07", title: "Floating panel UI + Alpine component",            status: "done",  deps: ["v3.1-05", "v3.1-06"] }
         - { id: "v3.1-08", title: "Idle timeout default 15min + polish + E2E",       status: "ready", deps: ["v3.1-07"] }
   umbrella:
     v3:
@@ -323,3 +323,20 @@ workflow_log:
       target_gzipped_kb: 250
       target_met: true
     note: "Skeleton-only modules per story: hermesTerminal() Alpine factory exposes state shape, TerminalSession exposes async fetch/execute/stop/replay, TerminalHistory holds up/down arrow logic, createXtermInstance() builds xterm + 3 addons themed to match panel design tokens. Story v3.1-07 will mount xterm into DOM, wire keyboard shortcuts, and finish UI behaviour."
+  - workflow: "dev-story"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    story: "v3.1-07"
+    title: "Floating panel UI + Alpine component + File Manager terminal removal"
+    branch: "feature/v3.1-realtime-terminal (direct)"
+    files_touched:
+      - "resources/views/panel/_terminal.blade.php (new partial)"
+      - "resources/views/panel/layout.blade.php (meta tags, sidebar terminal toggle, project-changed event, partial include)"
+      - "resources/views/panel/files.blade.php (removed terminal HTML + state + methods)"
+      - "resources/js/terminal/index.js (full hermesTerminal Alpine factory)"
+    bundle_sizes:
+      app_js_raw_kb: 508.59
+      app_js_gzipped_kb: 137.89
+      target_gzipped_kb: 250
+      target_met: true
+    note: "Floating panel mounted via @include('panel._terminal') at the end of the layout. Toggle dispatched via 'hermes-terminal-toggle' window event from sidebar button + File Manager toolbar. Project-switch dispatch via 'hermes-project-changed' before location.reload so current xterm state can wind down. Mode trusted-network bypass falls back to /execute-sync (no WebSocket subscription). Open/expanded state persists in localStorage. xterm + fit + search + web-links addons attached. Manual smoke deferred to deploy time."
