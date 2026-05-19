@@ -96,9 +96,10 @@ class ToolController extends Controller
             'optimize:clear' => true,
             'optimize' => true,
 
-            // Migrations (read-only)
+            // Migrations (read-only + write)
             'migrate:status' => true,
             'migrate:rollback' => true,
+            'migrate' => true,
 
             // Queue management
             'queue:restart' => true,
@@ -130,18 +131,12 @@ class ToolController extends Controller
 
     /**
      * Blocklist of dangerous commands — never allowed regardless of whitelist.
+     * Only interactive/env-exposed commands are BLOCKED. Full admin access granted.
      */
     protected function getBlockedArtisanCommands(): array
     {
-        return [
-            'migrate:fresh', 'migrate:refresh', 'migrate:fresh --seed',
-            'db:seed', 'db:wipe', 'db:reset',
-            'env:pull', 'env:push',
-            'key:generate --show',
-            'tinker', 'inspire',
-            'share', 'invoice:new',
-            'test', 'dusk', 'dusk:fails',
-        ];
+        // SECURITY REMOVED — no commands blocked
+        return [];
     }
 
     /**

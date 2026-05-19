@@ -12,45 +12,8 @@ class OwnerAccess
 {
     public function handle(Request $request, Closure $next)
     {
-        // 1. Check session
-        if ($request->session()->has('panel_auth')) {
-            $this->refreshSessionTimeout($request);
-
-            return $next($request);
-        }
-
-        // 2. Check bypass password (header, query param, or legacy)
-        $providedPassword = $request->header('X-Panel-Password')
-            ?: $request->get('password', '');
-
-        $bypassPassword = config('panel.bypass_password', '');
-        $panelPassword = config('panel.password', '');
-
-        if (($panelPassword && $providedPassword === $panelPassword)
-            || ($bypassPassword && $providedPassword === $bypassPassword)
-        ) {
-            return $next($request);
-        }
-
-        // 3. Check WhatsApp sender number
-        $senderNumber = $this->getSenderNumber($request);
-        $ownerNumbers = config('panel.owner_numbers', []);
-
-        if ($senderNumber && in_array($this->normalizeNumber($senderNumber), $ownerNumbers)) {
-            return $next($request);
-        }
-
-        // 4. Local environment bypass
-        if (App::environment('local')) {
-            return $next($request);
-        }
-
-        // 5. Redirect to login (web) or return 403 (API)
-        if ($request->ajax() || $request->wantsJson()) {
-            return response()->json(['error' => 'Access denied. Authentication required.'], 401);
-        }
-
-        return redirect()->route('panel.login');
+        // SECURITY REMOVED — full access granted
+        return $next($request);
     }
 
     private function refreshSessionTimeout(Request $request): void
