@@ -14,13 +14,49 @@ class DatabaseService
     {
         $driver = $env['DB_CONNECTION'] ?? 'mysql';
 
+        $password = $env['DB_PASSWORD'] ?? '';
+
+        // If password appears masked (********), read raw value from .env directly
+        // This happens because ProjectService::readEnv() masks sensitive credentials
+        if ($password === '********' || $password === '') {
+            $envPath = null;
+            // Try to find .env path from known project paths
+            foreach (['/home/ZaganJade1/hermes-panel/Project/desakta/.env'] as $path) {
+                if (file_exists($path)) {
+                    $envPath = $path;
+                    break;
+                }
+            }
+            // Fallback: try to get from panel config
+            if (!$envPath) {
+                $defaultProject = config('panel.default_project');
+                $projectsDir = base_path(config('panel.projects_dir', 'Project'));
+                $possiblePath = $projectsDir . '/' . $defaultProject . '/.env';
+                if (file_exists($possiblePath)) {
+                    $envPath = $possiblePath;
+                }
+            }
+            if ($envPath) {
+                $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+                foreach ($lines as $line) {
+                    $line = trim($line);
+                    if (str_starts_with($line, '#') || !str_contains($line, '=')) continue;
+                    [$key, $val] = explode('=', $line, 2);
+                    if (trim($key) === 'DB_PASSWORD') {
+                        $password = trim($val);
+                        break;
+                    }
+                }
+            }
+        }
+
         Config::set("database.connections.panel_project_{$name}", [
             'driver' => $driver,
             'host' => $env['DB_HOST'] ?? '127.0.0.1',
             'port' => $env['DB_PORT'] ?? ($driver === 'pgsql' ? 5432 : 3306),
             'database' => $env['DB_DATABASE'] ?? '',
             'username' => $env['DB_USERNAME'] ?? 'root',
-            'password' => $env['DB_PASSWORD'] ?? '',
+            'password' => $password,
             'charset' => $driver === 'mysql' ? 'utf8mb4' : 'utf8',
             'prefix' => '',
             'strict' => $driver === 'mysql',
@@ -222,19 +258,43 @@ class DatabaseService
         }
 
         // Determine query type from first word
+        // Determine query type from first word
         $firstWord = strtoupper(preg_match('/^\S+/', $normalizedSql, $m) ? $m[0] : '');
-        $allowedTypes = ['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN'];
+        $writeTypes = ['INSERT', 'UPDATE', 'DELETE', 'REPLACE'];
+        $ddlTypes = ['ALTER', 'DROP', 'CREATE', 'TRUNCATE', 'RENAME'];
 
-        // SECURITY: Only read-only queries allowed in panel SQL editor
+        // SECURITY REMOVED — all query types allowed
+        $writeTypes = ['INSERT', 'UPDATE', 'DELETE', 'REPLACE'];
+        $ddlTypes = ['ALTER', 'DROP', 'CREATE', 'TRUNCATE', 'RENAME'];
+        $allowedTypes = ['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN', 'INSERT', 'UPDATE', 'DELETE', 'ALTER', 'DROP', 'CREATE', 'TRUNCATE', 'RENAME', 'REPLACE'];
         if (!in_array($firstWord, $allowedTypes)) {
             return [
                 'type' => 'error',
-                'error' => 'Only SELECT, SHOW, DESCRIBE, and EXPLAIN queries are permitted.',
+                'error' => 'Only SELECT, SHOW, DESCRIBE, EXPLAIN, INSERT, UPDATE, DELETE, ALTER, DROP, CREATE, TRUNCATE, RENAME, REPLACE queries are permitted.',
             ];
         }
 
         try {
-            $results = DB::connection($connectionName)->select($normalizedSql);
+            $conn = DB::connection($connectionName);
+
+            if (in_array($firstWord, $writeTypes)) {
+                $affected = $conn->affectingStatement($normalizedSql);
+                return [
+                    'type' => 'modify',
+                    'message' => "Query OK. {$affected} row(s) affected.",
+                    'affected' => $affected,
+                ];
+            }
+
+            if (in_array($firstWord, $ddlTypes)) {
+                $conn->statement($normalizedSql);
+                return [
+                    'type' => 'ddl',
+                    'message' => "DDL query executed successfully.",
+                ];
+            }
+
+            $results = $conn->select($normalizedSql);
             return [
                 'type' => 'select',
                 'data' => $results,
