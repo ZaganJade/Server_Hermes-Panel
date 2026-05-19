@@ -7,6 +7,12 @@
 @section('content')
 <div x-data="toolsApp({{ json_encode($suggestedCommands) }}, {{ json_encode($allProjects) }})">
 
+    <!-- Toast Container -->
+    <div x-show="toastMessage" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+         class="fixed top-6 right-6 z-[100] px-5 py-3 font-mono text-[11px] tracking-wider uppercase text-ink shadow-lg"
+         :class="toastType === 'success' ? 'bg-[#5a7a5a]' : toastType === 'error' ? 'bg-[#b85c44]' : 'bg-[#d4a45c]'"
+         x-text="toastMessage" style="display: none;"></div>
+
     <!-- Editorial Header -->
     <div class="mb-12 animate-fade-up">
         <div class="grid lg:grid-cols-[1fr_auto] gap-8 items-end pb-8 border-b border-[color:var(--rule)]">
@@ -39,8 +45,11 @@
         <button @click="activeTab = 'logs'; loadLogs()" class="tab-editorial" :class="activeTab === 'logs' ? 'active' : ''">
             <span class="glyph text-base leading-none">β</span> Catatan
         </button>
-        <button @click="activeTab = 'queue'; loadQueueStatus()" class="tab-editorial" :class="activeTab === 'queue' ? 'active' : ''">
-            <span class="glyph text-base leading-none">γ</span> Antrian
+        <button @click="activeTab = 'artisan'; artisanCommand = 'db:seed'; loadSeeders()" class="tab-editorial" :class="activeTab === 'artisan' && artisanCommand === 'db:seed' ? 'active' : ''">
+            <span class="glyph text-base leading-none">γ</span> Seeder
+        </button>
+        <button @click="activeTab = 'queue'; loadQueueStatus()" class="tab-editorial" :class="activeTab === 'antrian' ? 'active' : ''">
+            <span class="glyph text-base leading-none">⚙</span> Antrian
         </button>
         <button @click="activeTab = 'composer'" class="tab-editorial" :class="activeTab === 'composer' ? 'active' : ''">
             <span class="glyph text-base leading-none">δ</span> Composer & NPM
@@ -52,7 +61,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-[1fr_240px_auto] gap-3 mb-6">
             <div>
                 <label class="label-mono">Perintah</label>
-                <select x-model="artisanCommand" class="select-editorial">
+                <select x-model="artisanCommand" @change="artisanCommand === 'db:seed' ? loadSeeders() : null" class="select-editorial">
                     <option value="">— Pilih perintah —</option>
                     <template x-for="cmd in suggestedCommands" :key="cmd">
                         <option :value="cmd" x-text="cmd"></option>
@@ -72,7 +81,7 @@
         </div>
 
         <!-- Seeder Panel -->
-        <div class="border border-[color:var(--rule)] mb-6">
+        <div x-show="artisanCommand === 'db:seed'" x-cloak class="border border-[color:var(--rule)] mb-6">
             <div class="flex items-center justify-between px-5 py-4 border-b border-[color:var(--rule)] bg-ink-soft">
                 <div>
                     <div class="section-label">Seeder</div>
@@ -163,50 +172,152 @@
         </div>
     </div>
 
-    <!-- Queue Tab -->
-    <div x-show="activeTab === 'queue'" x-cloak class="animate-fade-up-2">
-        <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-6 items-end mb-6 pb-4 border-b border-[color:var(--rule)]">
+    <!-- Antrian Tab (Queue Monitor) -->
+    <div x-show="activeTab === 'antrian'" x-cloak class="animate-fade-up-2">
+
+        <!-- Queue Status Card -->
+        <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-6 items-end mb-8 pb-6 border-b border-[color:var(--rule)]">
             <div>
-                <div class="section-label mb-3">Antrian</div>
-                <div class="font-serif text-3xl text-paper" style="font-variation-settings: 'opsz' 144, 'wght' 500, 'WONK' 1;">
-                    Pekerjaan <span class="italic text-copper">gagal</span>:
-                    <span class="font-mono text-3xl text-copper" x-text="failedCount"></span>
-                </div>
+                <div class="section-label mb-3">⚙ Antrian</div>
+                <h2 class="font-serif text-3xl text-paper" style="font-variation-settings: 'opsz' 60, 'wght' 400, 'WONK' 1;">
+                    Pemroses <span class="italic text-copper">Tugas</span>
+                </h2>
             </div>
             <div class="flex flex-wrap gap-2">
-                <button @click="queueAction('restart')" class="btn-mini">⟲ Restart Worker</button>
-                <button @click="queueAction('flush')" class="btn-mini">↯ Flush Failed</button>
+                <button @click="dispatchCleanup()" :disabled="dispatchRunning" class="btn-copper" :class="{ 'disabled': dispatchRunning }">
+                    <span x-text="dispatchRunning ? 'Menjalankan…' : 'Jalankan Sekarang'"></span>
+                    <span class="font-serif italic" x-show="!dispatchRunning">↗</span>
+                </button>
+                <button @click="flushQueue()" class="btn-mini" :class="{ 'disabled': flushRunning }">
+                    ↯ Flush Semua
+                </button>
+                <button @click="loadQueueStatus()" class="btn-mini">⟳ Refresh</button>
             </div>
         </div>
 
-        <div class="border border-[color:var(--rule)] overflow-x-auto">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            <div class="border border-[color:var(--rule)] p-5 bg-ink">
+                <div class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim mb-2">Driver</div>
+                <div class="font-serif text-2xl text-copper" x-text="queueStats.driver || 'Database'"></div>
+            </div>
+            <div class="border border-[color:var(--rule)] p-5 bg-ink">
+                <div class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim mb-2">Connection</div>
+                <div class="font-serif text-2xl text-paper" x-text="queueStats.connection || 'default'"></div>
+            </div>
+            <div class="border border-[color:var(--rule)] p-5 bg-ink">
+                <div class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim mb-2">Status</div>
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full" :class="queueStats.workers > 0 ? 'bg-[#5a7a5a]' : 'bg-[#b85c44]'"></span>
+                    <span class="font-serif text-2xl" :class="queueStats.workers > 0 ? 'text-[#5a7a5a]' : 'text-[#b85c44]'" x-text="queueStats.workers > 0 ? 'Running' : 'Stopped'"></span>
+                </div>
+            </div>
+            <div class="border border-[color:var(--rule)] p-5 bg-ink">
+                <div class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim mb-2">Jobs Hari Ini</div>
+                <div class="font-serif text-2xl text-paper" x-text="queueStats.jobs_today || 0"></div>
+            </div>
+        </div>
+
+        <!-- Worker Info (if running) -->
+        <div x-show="queueStats.workers > 0" class="mb-8 p-5 border border-[color:var(--verdigris)] bg-[color:var(--verdigris)]/10">
+            <div class="flex items-center gap-3">
+                <span class="font-serif italic text-xl text-[#5a7a5a]">●</span>
+                <div>
+                    <div class="font-mono text-[10px] tracking-[0.22em] uppercase text-paper-dim mb-1">Worker aktif</div>
+                    <div class="font-mono text-[11px] text-paper" x-text="`PID: ${queueStats.pid || '—'} · Menunggu job`"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Failed Jobs Table -->
+        <div class="border border-[color:var(--rule)] overflow-x-auto mb-6">
             <table class="table-editorial">
                 <thead>
                     <tr>
-                        <th>ID</th>
+                        <th>Job ID</th>
+                        <th>Nama</th>
                         <th>Antrian</th>
+                        <th>Status</th>
                         <th>Gagal Pada</th>
-                        <th>Pengecualian</th>
                         <th class="text-right">Aksi</th>
                     </tr>
                 </thead>
                 <tbody>
                     <template x-for="job in failedJobs" :key="job.id">
                         <tr>
-                            <td class="text-paper" x-text="job.id"></td>
-                            <td class="text-paper-soft" x-text="job.queue"></td>
-                            <td class="text-paper-dim text-[10px]" x-text="job.failed_at"></td>
-                            <td class="text-[color:var(--rust)]/80 text-[10px] truncate max-w-[400px]" :title="job.exception" x-text="job.exception"></td>
+                            <td class="text-paper font-mono text-[11px]" x-text="'#' + job.id"></td>
+                            <td class="text-paper-soft" x-text="job.payload ? JSON.parse(job.payload).displayName : 'Unknown'"></td>
+                            <td class="text-paper-dim text-[10px]" x-text="job.queue || 'default'"></td>
+                            <td>
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-mono tracking-[0.15em] uppercase border"
+                                      :class="job.failed_at ? 'border-[#b85c44] text-[#b85c44]' : 'border-[#c8a04a] text-[#c8a04a]'">
+                                    <span class="w-1.5 h-1.5 rounded-full" :class="job.failed_at ? 'bg-[#b85c44]' : 'bg-[#c8a04a]'"></span>
+                                    <span x-text="job.failed_at ? 'Failed' : 'Pending'"></span>
+                                </span>
+                            </td>
+                            <td class="text-paper-dim text-[10px]" x-text="job.failed_at ? formatDate(job.failed_at) : '—'"></td>
                             <td class="text-right">
-                                <button @click="retryJob(job.id)" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-copper transition-colors">Coba Lagi ↗</button>
+                                <button x-show="job.failed_at" @click="retryJob(job.id)" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-copper transition-colors">⟳ Coba Lagi</button>
+                                <button @click="forgetJob(job.id)" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-[#b85c44] transition-colors ml-3">✕ Hapus</button>
                             </td>
                         </tr>
                     </template>
                     <tr x-show="failedJobs.length === 0">
-                        <td colspan="5" class="text-center py-12 font-serif italic text-paper-dim">Tidak ada pekerjaan gagal.</td>
+                        <td colspan="6" class="text-center py-12 font-serif italic text-paper-dim">
+                            <span x-show="queueStats.workers > 0">Tidak ada pekerjaan gagal.</span>
+                            <span x-show="queueStats.workers === 0">Worker tidak aktif. Jalankan <code class="text-copper">php artisan queue:work</code> dulu.</span>
+                        </td>
                     </tr>
                 </tbody>
             </table>
+        </div>
+
+        <!-- Recent Jobs -->
+        <div class="border border-[color:var(--rule)] overflow-x-auto">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-[color:var(--rule)] bg-ink-soft">
+                <span class="section-label">Pekerjaan Terakhir</span>
+                <span class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim" x-text="recentJobs.length + ' pekerjaan'"></span>
+            </div>
+            <table class="table-editorial">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nama</th>
+                        <th>Status</th>
+                        <th>Waktu</th>
+                        <th>Diaktifkan</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="(job, i) in recentJobs" :key="i">
+                        <tr>
+                            <td class="font-mono text-[10px] text-paper-dim" x-text="'#' + (i + 1)"></td>
+                            <td class="text-paper" x-text="job.name || 'CleanupDatabaseTrash'"></td>
+                            <td>
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-mono tracking-[0.15em] uppercase border"
+                                      :class="job.status === 'completed' ? 'border-[#5a7a5a] text-[#5a7a5a]' : job.status === 'failed' ? 'border-[#b85c44] text-[#b85c44]' : 'border-[#c8a04a] text-[#c8a04a]'">
+                                    <span class="w-1.5 h-1.5 rounded-full" :class="job.status === 'completed' ? 'bg-[#5a7a5a]' : job.status === 'failed' ? 'bg-[#b85c44]' : 'bg-[#c8a04a]'"></span>
+                                    <span x-text="job.status || 'pending'"></span>
+                                </span>
+                            </td>
+                            <td class="text-paper-soft text-[10px]" x-text="job.runtime ? job.runtime + 's' : '—'"></td>
+                            <td class="text-paper-dim text-[10px]" x-text="job.created_at ? formatDate(job.created_at) : '—'"></td>
+                        </tr>
+                    </template>
+                    <tr x-show="recentJobs.length === 0">
+                        <td colspan="5" class="text-center py-8 font-serif italic text-paper-dim">Belum ada pekerjaan.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Dispatch output -->
+        <div x-show="dispatchOutput" class="mt-6 border border-[color:var(--rule)]">
+            <div class="flex items-center justify-between px-5 py-3 border-b border-[color:var(--rule)] bg-ink-soft">
+                <span class="section-label">Keluaran Dispatch</span>
+                <button @click="dispatchOutput = ''" class="font-mono text-[9px] tracking-[0.22em] uppercase text-paper-dim hover:text-copper transition-colors">Bersihkan ↗</button>
+            </div>
+            <pre class="bg-ink p-5 font-mono text-[11px] text-paper-soft whitespace-pre-wrap max-h-[200px] overflow-y-auto leading-relaxed" x-text="dispatchOutput"></pre>
         </div>
     </div>
 
@@ -303,9 +414,29 @@ function toolsApp(suggestedCommands, projects) {
         artisanCommand: '', artisanOptions: '', artisanRunning: false, artisanOutput: '',
         seeders: [], selectedSeeder: '', seederRunning: false, seederOutput: '', seedersError: '',
         logs: [], logFilter: 'all', logSearch: '', autoRefresh: false, autoRefreshTimer: null,
-        failedJobs: [], failedCount: 0,
+        failedJobs: [], recentJobs: [], queueStats: {},
+        dispatchRunning: false, flushRunning: false, dispatchOutput: '',
         composerProject: '', composerRunning: false, npmRunning: false, composerOutput: '', npmOutput: '',
         csrf: document.querySelector('meta[name="csrf-token"]')?.content || '',
+
+        // Toast
+        toastMessage: '',
+        toastType: 'success',
+        toastTimeout: null,
+
+        showToast(message, type = 'success') {
+            this.toastMessage = message;
+            this.toastType = type;
+            if (this.toastTimeout) clearTimeout(this.toastTimeout);
+            this.toastTimeout = setTimeout(() => { this.toastMessage = ''; }, 3000);
+        },
+
+        formatDate(val) {
+            if (!val) return '—';
+            try {
+                return new Date(val).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            } catch(e) { return val; }
+        },
 
         async runArtisan() {
             this.artisanRunning = true; this.artisanOutput = '';
@@ -318,8 +449,8 @@ function toolsApp(suggestedCommands, projects) {
                 });
                 const data = await res.json();
                 this.artisanOutput = (data.output || '') + (data.error ? '\n' + data.error : '');
-                if (!data.success) showToast('Perintah gagal', 'error');
-                else showToast('Selesai');
+                if (!data.success) this.showToast('Perintah gagal', 'error');
+                else this.showToast('Selesai');
             } catch(e) { this.artisanOutput = 'Permintaan gagal'; }
             this.artisanRunning = false;
         },
@@ -352,8 +483,8 @@ function toolsApp(suggestedCommands, projects) {
                 });
                 const data = await res.json();
                 this.seederOutput = (data.output || '') + (data.error ? '\n' + data.error : '');
-                if (data.success) showToast('Seeder berhasil dijalankan');
-                else showToast('Seeder gagal', 'error');
+                if (data.success) this.showToast('Seeder berhasil dijalankan');
+                else this.showToast('Seeder gagal', 'error');
             } catch(e) { this.seederOutput = 'Permintaan gagal'; }
             this.seederRunning = false;
         },
@@ -372,7 +503,7 @@ function toolsApp(suggestedCommands, projects) {
         async clearLogs() {
             if (!confirm('Bersihkan semua catatan?')) return;
             await fetch('{{ route("panel.api.logs-clear") }}', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf } });
-            this.logs = []; showToast('Catatan dibersihkan');
+            this.logs = []; this.showToast('Catatan dibersihkan');
         },
 
         toggleAutoRefresh() {
@@ -385,21 +516,58 @@ function toolsApp(suggestedCommands, projects) {
                 const res = await fetch('{{ route("panel.api.queue-status") }}', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
                 const data = await res.json();
                 this.failedJobs = data.failed_jobs || [];
-                this.failedCount = data.failed_count || 0;
-            } catch(e) { this.failedJobs = []; this.failedCount = 0; }
+                this.queueStats = data.queue_stats || {};
+                this.recentJobs = data.recent_jobs || [];
+            } catch(e) {
+                this.failedJobs = [];
+                this.queueStats = {};
+                this.recentJobs = [];
+            }
         },
 
         async retryJob(id) {
             await fetch(`{{ route("panel.api.queue-retry", ["id" => "__I__"]) }}`.replace('__I__', id), {
                 method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf }
             });
-            this.loadQueueStatus(); showToast('Pekerjaan dijadwalkan ulang');
+            this.loadQueueStatus(); this.showToast('Pekerjaan dijadwalkan ulang');
+        },
+
+        async forgetJob(id) {
+            await fetch(`{{ route("panel.api.queue-forget", ["id" => "__I__"]) }}`.replace('__I__', id), {
+                method: 'DELETE', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf }
+            });
+            this.loadQueueStatus(); this.showToast('Pekerjaan dihapus');
+        },
+
+        async dispatchCleanup() {
+            this.dispatchRunning = true; this.dispatchOutput = '';
+            try {
+                const res = await fetch('{{ route("panel.api.queue-dispatch-cleanup") }}', {
+                    method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf }
+                });
+                const data = await res.json();
+                this.dispatchOutput = (data.output || '') + (data.error ? '\n' + data.error : '');
+                if (data.success) this.showToast('Cleanup job dispatched');
+                else this.showToast(data.error || 'Gagal', 'error');
+            } catch(e) { this.dispatchOutput = 'Permintaan gagal'; }
+            this.dispatchRunning = false;
+            this.loadQueueStatus();
+        },
+
+        async flushQueue() {
+            if (!confirm('Flush semua failed jobs?')) return;
+            this.flushRunning = true;
+            await fetch('{{ route("panel.api.queue-flush") }}', {
+                method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf }
+            });
+            this.flushRunning = false;
+            this.loadQueueStatus(); this.showToast('Queue flushed');
         },
 
         async queueAction(action) {
             const route = action === 'restart' ? '{{ route("panel.api.queue-restart") }}' : '{{ route("panel.api.queue-flush") }}';
             await fetch(route, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf } });
-            this.loadQueueStatus(); showToast(`Antrian: ${action} berhasil`);
+            this.loadQueueStatus(); this.showToast(`Antrian: ${action} berhasil`);
         },
 
         async runComposer(command) {

@@ -4,6 +4,8 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Schema;
+use Carbon\Carbon;
 
 class DatabaseService
 {
@@ -187,13 +189,14 @@ class DatabaseService
      * Validate a SQL identifier (table name or column name).
      * Only allows alphanumeric characters and underscores.
      */
-    protected function isValidSqlIdentifier(string $identifier): bool
+    public function isValidSqlIdentifier(string $identifier): bool
     {
         return preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $identifier) === 1;
     }
 
     /**
      * Get table data with pagination and sorting.
+     * Includes column metadata, primary key, and soft deletes detection.
      */
     public function getTableData(string $connectionName, string $table, int $page = 1, int $perPage = 25, string $sortBy = null, string $sortDir = 'asc'): array
     {
@@ -222,6 +225,15 @@ class DatabaseService
             $sortBy = null;
         }
 
+        // Get column metadata and detect soft deletes
+        $columns = $this->getTableColumns($connectionName, $table);
+        $primaryKey = $this->getPrimaryKey($connectionName, $table);
+        $softDeletes = $this->detectSoftDeletes($connectionName, $table);
+
+        // Filter out deleted_at from columns for UI (but keep softDeletes flag)
+        $displayColumns = array_filter($columns, fn($col) => $col['name'] !== 'deleted_at');
+        $displayColumns = array_values($displayColumns);
+
         $baseQuery = $conn->table($table);
         $countQuery = clone $baseQuery;
 
@@ -233,12 +245,101 @@ class DatabaseService
         $data = $baseQuery->skip(($page - 1) * $perPage)->take($perPage)->get();
 
         return [
+            'columns' => $displayColumns,
             'data' => $data,
             'total' => $total,
             'page' => $page,
             'per_page' => $perPage,
             'last_page' => $perPage > 0 ? max(1, (int) ceil($total / $perPage)) : 1,
+            'primaryKey' => $primaryKey,
+            'softDeletes' => $softDeletes,
         ];
+    }
+
+    /**
+     * Get trashed (soft-deleted) rows from a table.
+     */
+    public function getTrashData(string $connectionName, string $table, int $page = 1, int $perPage = 25): array
+    {
+        if (!$this->isValidSqlIdentifier($table)) {
+            return [
+                'rows' => [],
+                'total' => 0,
+                'page' => $page,
+                'last_page' => 1,
+                'error' => 'Invalid table name.',
+            ];
+        }
+
+        $conn = DB::connection($connectionName);
+
+        // Use onlyTrashed() to get soft-deleted rows
+        $baseQuery = $conn->table($table)->onlyTrashed();
+        $countQuery = clone $baseQuery;
+
+        $total = $countQuery->count();
+        $rows = $baseQuery->skip(($page - 1) * $perPage)->take($perPage)->get();
+
+        // Get column names from table metadata
+        $columnsMeta = $this->getTableColumns($connectionName, $table);
+        $displayColumns = array_map(fn($col) => $col['name'], $columnsMeta);
+
+        return [
+            'columns' => $displayColumns,
+            'rows' => $rows,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'last_page' => $perPage > 0 ? max(1, (int) ceil($total / $perPage)) : 1,
+        ];
+    }
+
+    /**
+     * Restore a soft-deleted row.
+     */
+    public function restoreRow(string $connectionName, string $table, int $id): bool
+    {
+        if (!$this->isValidSqlIdentifier($table)) {
+            return false;
+        }
+
+        try {
+            $primaryKey = $this->getPrimaryKey($connectionName, $table);
+
+            $affected = DB::connection($connectionName)
+                ->table($table)
+                ->onlyTrashed()
+                ->where($primaryKey, $id)
+                ->update(['deleted_at' => null]);
+
+            return $affected > 0;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Permanently delete a row (force delete).
+     */
+    public function forceDeleteRow(string $connectionName, string $table, $id): bool
+    {
+        if (!$this->isValidSqlIdentifier($table)) {
+            return false;
+        }
+
+        try {
+            $primaryKey = $this->getPrimaryKey($connectionName, $table);
+
+            $affected = DB::connection($connectionName)
+                ->table($table)
+                ->onlyTrashed()
+                ->where($primaryKey, $id)
+                ->forceDelete();
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /**
@@ -357,5 +458,106 @@ class DatabaseService
         if ($bytes >= 1048576) return number_format($bytes / 1048576, 2) . ' MB';
         if ($bytes >= 1024) return number_format($bytes / 1024, 2) . ' KB';
         return $bytes . ' B';
+    }
+
+    /**
+     * Get column metadata for a table.
+     */
+    public function getTableColumns(string $connectionName, string $table): array
+    {
+        if (!$this->isValidSqlIdentifier($table)) {
+            return [];
+        }
+
+        try {
+            $columns = [];
+            $rows = DB::connection($connectionName)->select("DESCRIBE `{$table}`");
+
+            foreach ($rows as $row) {
+                $type = 'varchar';
+                $typeArgs = null;
+
+                // Parse type (e.g., "varchar(255)", "int(11)", "datetime")
+                if (preg_match('/^(\w+)(?:\((\d+)\))?/', $row->Type, $matches)) {
+                    $type = strtolower($matches[1]);
+                    $typeArgs = isset($matches[2]) ? (int) $matches[2] : null;
+                }
+
+                $columns[] = [
+                    'name' => $row->Field,
+                    'type' => $type,
+                    'type_args' => $typeArgs,
+                    'nullable' => $row->Null === 'YES',
+                    'key' => $row->Key,
+                    'default' => $row->Default,
+                    'extra' => $row->Extra,
+                ];
+            }
+
+            return $columns;
+        } catch (\Throwable $e) {
+            // Try PostgreSQL
+            try {
+                $rows = DB::connection($connectionName)->select("
+                    SELECT column_name as field, data_type as type, is_nullable as null, column_default as default
+                    FROM information_schema.columns
+                    WHERE table_name = '{$table}'
+                    ORDER BY ordinal_position
+                ");
+
+                $columns = [];
+                foreach ($rows as $row) {
+                    $columns[] = [
+                        'name' => $row->field,
+                        'type' => strtolower($row->type),
+                        'type_args' => null,
+                        'nullable' => $row->null === 'YES',
+                        'key' => '',
+                        'default' => $row->default,
+                        'extra' => '',
+                    ];
+                }
+                return $columns;
+            } catch (\Throwable $e2) {
+                return [];
+            }
+        }
+    }
+
+    /**
+     * Detect if a table uses soft deletes (has deleted_at column).
+     */
+    public function detectSoftDeletes(string $connectionName, string $table): bool
+    {
+        if (!$this->isValidSqlIdentifier($table)) {
+            return false;
+        }
+
+        try {
+            return Schema::connection($connectionName)->hasColumn($table, 'deleted_at');
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get primary key column name for a table.
+     */
+    public function getPrimaryKey(string $connectionName, string $table): string
+    {
+        if (!$this->isValidSqlIdentifier($table)) {
+            return 'id';
+        }
+
+        try {
+            $result = DB::connection($connectionName)->select("SHOW KEYS FROM `{$table}` WHERE Key_name = 'PRIMARY'");
+            if (!empty($result)) {
+                return $result[0]->Column_name;
+            }
+        } catch (\Throwable $e) {
+            // Fallback
+        }
+
+        return 'id';
     }
 }

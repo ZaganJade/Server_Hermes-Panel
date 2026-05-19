@@ -52,8 +52,15 @@ Route::prefix('panel')->name('panel.')->middleware('owner.access')->group(functi
     // AJAX: Database
     Route::get('/api/tables', [DatabaseController::class, 'tables'])->name('api.tables');
     Route::get('/api/tables/{table}/data', [DatabaseController::class, 'tableData'])->name('api.table-data');
-    Route::post('/api/tables/{table}/rows', [DatabaseController::class, 'updateRow'])->name('api.update-row');
+    Route::get('/api/tables/{table}/columns', [DatabaseController::class, 'getColumns'])->name('api.table-columns');
+    Route::patch('/api/tables/{table}/{id}/cell', [DatabaseController::class, 'updateCell'])->name('api.update-cell');
+    Route::post('/api/tables/{table}/rows', [DatabaseController::class, 'storeRow'])->name('api.store-row');
+    Route::post('/api/tables/{table}/update', [DatabaseController::class, 'updateRow'])->name('api.update-row');
     Route::delete('/api/tables/{table}/rows/{id}', [DatabaseController::class, 'deleteRow'])->name('api.delete-row');
+    Route::get('/api/tables/{table}/trash', [DatabaseController::class, 'getTrash'])->name('api.table-trash');
+    Route::post('/api/tables/{table}/{id}/restore', [DatabaseController::class, 'restoreRow'])->name('api.restore-row');
+    Route::delete('/api/tables/{table}/{id}/force', [DatabaseController::class, 'forceDeleteRow'])->name('api.force-delete-row');
+    Route::delete('/api/tables/{table}/trash', [DatabaseController::class, 'emptyTrash'])->name('api.empty-trash');
     Route::post('/api/query', [DatabaseController::class, 'runQuery'])->name('api.query');
     Route::get('/api/tables/{table}/export/{format}', [DatabaseController::class, 'exportTable'])->name('api.export');
     Route::get('/api/connections', [DatabaseController::class, 'connections'])->name('api.connections');
@@ -81,6 +88,8 @@ Route::prefix('panel')->name('panel.')->middleware('owner.access')->group(functi
     Route::post('/api/queue/retry/{id}', [ToolController::class, 'queueRetry'])->name('api.queue-retry');
     Route::post('/api/queue/restart', [ToolController::class, 'queueRestart'])->name('api.queue-restart');
     Route::post('/api/queue/flush', [ToolController::class, 'queueFlush'])->name('api.queue-flush');
+    Route::post('/api/queue/dispatch-cleanup', [ToolController::class, 'dispatchCleanup'])->name('api.queue-dispatch-cleanup');
+    Route::delete('/api/queue/forget/{id}', [ToolController::class, 'queueForget'])->name('api.queue-forget');
     Route::post('/api/composer', [ToolController::class, 'runComposer'])->name('api.composer');
     Route::get('/api/seeders', [ToolController::class, 'listSeeders'])->name('api.seeders');
     Route::post('/api/db-seed', [ToolController::class, 'dbSeed'])->name('api.db-seed');
