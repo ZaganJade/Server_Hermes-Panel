@@ -4,7 +4,7 @@
 project_name: "Hermes Panel"
 project_level: 3
 adoption_strategy: "forward-only"
-last_workflow: "sprint-planning"
+last_workflow: "dev-story"
 last_workflow_date: "2026-05-19"
 initialized_at: "2026-05-19"
 initialized_by: "manual setup (Strategy A: forward-only)"
@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 1
   stories_created: 8
-  stories_completed: 0
+  stories_completed: 1
   active_sprint: "v3.1"
   sprints:
     - id: "v3.1"
@@ -59,7 +59,7 @@ phase_4_implementation:
       design_doc: "docs/superpowers/specs/2026-05-19-realtime-terminal-design.md"
       story_index: "docs/bmad/stories/v3.1-INDEX.md"
       stories:
-        - { id: "v3.1-01", title: "Install Reverb + broadcasting config",          status: "ready", deps: [] }
+        - { id: "v3.1-01", title: "Install Reverb + broadcasting config",          status: "done",  deps: [], commit: "34e9c69" }
         - { id: "v3.1-02", title: "Extract TerminalCommandPolicy",                  status: "ready", deps: [] }
         - { id: "v3.1-03", title: "TerminalSessionService + cache schema",          status: "ready", deps: ["v3.1-02"] }
         - { id: "v3.1-04", title: "Tick-loop artisan command + supervisord entry",  status: "ready", deps: ["v3.1-03"] }
@@ -120,9 +120,10 @@ workflow_log:
         status: "FIXED"
         summary: "throttle:10,1 added on POST /panel/login (defense-in-depth over controller's RateLimiter)"
       - id: "MED-3"
-        status: "QUEUED"
+        status: "FIXED"
         story: "v3.1-01"
-        summary: "Reverb installation closes the gap (was NOT-APPLICABLE; now scheduled in v3.1 sprint)"
+        commit: "34e9c69"
+        summary: "Reverb installed and broadcasting layer registered in story v3.1-01"
       - id: "MED-7"
         status: "DOCUMENTED"
         summary: "Added SESSION_SECURE_COOKIE=true reminder in .env.example for HTTPS deployment"
@@ -167,3 +168,28 @@ workflow_log:
       - { id: "MED-5",        story: "v3.1-02", note: "TerminalCommandPolicy extract is the home for evolving rules" }
       - { id: "REVERB-AUDIT", story: "v3.1-05", note: "Channel auth + 3 feature tests" }
     note: "v3.1 sub-project decomposed into 8 sequential-with-parallel-where-possible stories."
+  - workflow: "dev-story"
+    date: "2026-05-19"
+    sprint: "v3.1"
+    story: "v3.1-01"
+    title: "Install Reverb + broadcasting config"
+    branch: "story/v3.1-01-reverb-install"
+    commit: "34e9c69"
+    files_touched:
+      - "composer.json"
+      - "composer.lock"
+      - "config/reverb.php"
+      - "routes/channels.php"
+      - "bootstrap/app.php"
+      - ".env.example"
+      - "README.md"
+    acceptance:
+      ac1_composer_require: "DONE"
+      ac2_server_env_keys: "DONE"
+      ac3_vite_env_keys: "DONE"
+      ac4_supervisord_runs: "DEFERRED-deploy-time"
+      ac5_broadcast_smoke: "DEFERRED-story-06-when-echo-client-exists"
+      ac6_readme_stub: "DONE"
+      ac7_pint_clean: "DONE"
+    closes_pending_decision: "MED-3"
+    note: "Foundation laid. Channel auth callback in routes/channels.php is empty placeholder; terminal channel registration happens in story v3.1-05."
