@@ -186,18 +186,46 @@ class ToolController extends Controller
 
             try {
                 $failedJobs = \DB::connection('panel_queue')->table('failed_jobs')->orderBy('failed_at', 'desc')->limit(50)->get();
+                $jobsTable = \DB::connection('panel_queue')->table('jobs')->limit(20)->orderBy('id', 'desc')->get();
+
+                // Get recent jobs from jobs table if exists
+                $recentJobs = [];
+                foreach ($jobsTable as $job) {
+                    $payload = json_decode($job->payload ?? '{}', true);
+                    $recentJobs[] = [
+                        'id' => $job->id,
+                        'name' => $payload['displayName'] ?? 'Unknown',
+                        'queue' => $job->queue ?? 'default',
+                        'attempts' => $job->attempts ?? 0,
+                        'status' => 'pending',
+                        'runtime' => null,
+                        'created_at' => $job->created_at ?? null,
+                    ];
+                }
+
+                // Get queue stats
+                $queueSize = \DB::connection('panel_queue')->table('jobs')->count();
+                $failedCount = \DB::connection('panel_queue')->table('failed_jobs')->count();
 
                 return response()->json([
                     'success' => true,
                     'failed_jobs' => $failedJobs,
-                    'failed_count' => \DB::connection('panel_queue')->table('failed_jobs')->count(),
+                    'failed_count' => $failedCount,
+                    'queue_stats' => [
+                        'driver' => $env['QUEUE_CONNECTION'] ?? 'database',
+                        'connection' => 'default',
+                        'workers' => 0, // Cannot detect from DB
+                        'pid' => null,
+                        'jobs_today' => $queueSize,
+                    ],
+                    'recent_jobs' => $recentJobs,
                 ]);
             } catch (\Throwable $e) {
-                return response()->json(['success' => true, 'failed_jobs' => [], 'failed_count' => 0, 'error' => $e->getMessage()]);
+                return response()->json(['success' => true, 'failed_jobs' => [], 'failed_count' => 0, 'queue_stats' => [], 'recent_jobs' => [], 'error' => $e->getMessage()]);
             }
         }
 
-        return response()->json(['success' => true, 'failed_jobs' => [], 'failed_count' => 0]);
+        return response()->json(['success' => true, 'failed_jobs' => [], 'failed_count' => 0, 'queue_stats' => [], 'recent_jobs' => []]);
     }
 
     public function queueRetry(Request $request, $id)
@@ -263,6 +291,55 @@ class ToolController extends Controller
             'success' => $result->successful(),
             'output' => $result->output(),
         ]);
+    }
+
+    public function dispatchCleanup(Request $request)
+    {
+        $projectPath = $this->getProjectPath();
+
+        if (!$projectPath) {
+            return response()->json(['success' => false, 'error' => 'No active project']);
+        }
+
+        // Dispatch CleanupDatabaseTrash job via artisan
+        $result = Process::path($projectPath)->run('php artisan queue:push CleanupDatabaseTrash --queue=default');
+
+        return response()->json([
+            'success' => $result->successful(),
+            'output' => $result->output() ?: 'Cleanup job dispatched.',
+            'error' => $result->errorOutput(),
+        ]);
+    }
+
+    public function queueForget(Request $request, $id)
+    {
+        $projectPath = $this->getProjectPath();
+
+        if (!$projectPath) {
+            return response()->json(['success' => false, 'error' => 'No active project']);
+        }
+
+        $env = $this->projectService->readEnv($projectPath);
+
+        if (!empty($env['DB_DATABASE'])) {
+            config(["database.connections.panel_queue" => [
+                'driver' => $env['DB_CONNECTION'] ?? 'mysql',
+                'host' => $env['DB_HOST'] ?? '127.0.0.1',
+                'port' => $env['DB_PORT'] ?? 3306,
+                'database' => $env['DB_DATABASE'] ?? '',
+                'username' => $env['DB_USERNAME'] ?? 'root',
+                'password' => $env['DB_PASSWORD'] ?? '',
+            ]]);
+
+            try {
+                \DB::connection('panel_queue')->table('failed_jobs')->where('id', $id)->delete();
+                return response()->json(['success' => true]);
+            } catch (\Throwable $e) {
+                return response()->json(['success' => false, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return response()->json(['success' => false, 'error' => 'No database configured']);
     }
 
     public function runComposer(Request $request)

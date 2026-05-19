@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\DatabaseService;
 use App\Services\ProjectService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DatabaseController extends Controller
 {
@@ -83,6 +84,150 @@ class DatabaseController extends Controller
         return response()->json($result);
     }
 
+    public function getColumns(Request $request, string $table)
+    {
+        $connectionKey = $request->get('connection', 'primary');
+        $connName = $this->configureActiveProjectDb($connectionKey);
+
+        if (!$connName) {
+            return response()->json(['error' => 'No database configured', 'columns' => []]);
+        }
+
+        $columns = $this->dbService->getTableColumns($connName, $table);
+
+        return response()->json(['columns' => $columns]);
+    }
+
+    public function updateCell(Request $request, string $table, $id)
+    {
+        $connectionKey = $request->get('connection', 'primary');
+        $connName = $this->configureActiveProjectDb($connectionKey);
+
+        if (!$connName) {
+            return response()->json(['success' => false, 'error' => 'No database configured']);
+        }
+
+        try {
+            $column = $request->input('column');
+            $value = $request->input('value');
+
+            if (!$column) {
+                return response()->json(['success' => false, 'error' => 'Column is required']);
+            }
+
+            // Validate column name
+            if (!$this->dbService->isValidSqlIdentifier($column)) {
+                return response()->json(['success' => false, 'error' => 'Invalid column name']);
+            }
+
+            $primaryKey = $this->dbService->getPrimaryKey($connName, $table);
+
+            DB::connection($connName)->table($table)
+                ->where($primaryKey, $id)
+                ->update([$column => $value]);
+
+            return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    public function storeRow(Request $request, string $table)
+    {
+        $connectionKey = $request->get('connection', 'primary');
+        $connName = $this->configureActiveProjectDb($connectionKey);
+
+        if (!$connName) {
+            return response()->json(['success' => false, 'error' => 'No database configured']);
+        }
+
+        try {
+            $data = $request->all();
+
+            // Remove connection key from data if present
+            unset($data['connection']);
+
+            // Validate all column names
+            foreach (array_keys($data) as $column) {
+                if (!$this->dbService->isValidSqlIdentifier($column)) {
+                    return response()->json(['success' => false, 'error' => "Invalid column name: {$column}"]);
+                }
+            }
+
+            $id = DB::connection($connName)->table($table)->insertGetId($data);
+
+            return response()->json(['success' => true, 'id' => $id]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
+    public function getTrash(Request $request, string $table)
+    {
+        $connectionKey = $request->get('connection', 'primary');
+        $connName = $this->configureActiveProjectDb($connectionKey);
+
+        if (!$connName) {
+            return response()->json(['error' => 'No database configured', 'rows' => []]);
+        }
+
+        $page = (int) $request->get('page', 1);
+        $perPage = (int) $request->get('per_page', 25);
+
+        $result = $this->dbService->getTrashData($connName, $table, $page, $perPage);
+
+        return response()->json($result);
+    }
+
+    public function restoreRow(Request $request, string $table, $id)
+    {
+        $connectionKey = $request->get('connection', 'primary');
+        $connName = $this->configureActiveProjectDb($connectionKey);
+
+        if (!$connName) {
+            return response()->json(['success' => false, 'error' => 'No database configured']);
+        }
+
+        $success = $this->dbService->restoreRow($connName, $table, (int) $id);
+
+        return response()->json(['success' => $success]);
+    }
+
+    public function forceDeleteRow(Request $request, string $table, $id)
+    {
+        $connectionKey = $request->get('connection', 'primary');
+        $connName = $this->configureActiveProjectDb($connectionKey);
+
+        if (!$connName) {
+            return response()->json(['success' => false, 'error' => 'No database configured']);
+        }
+
+        $success = $this->dbService->forceDeleteRow($connName, $table, $id);
+
+            return response()->json(['success' => $success]);
+    }
+
+    public function emptyTrash(Request $request, string $table)
+    {
+        $connectionKey = $request->get('connection', 'primary');
+        $connName = $this->configureActiveProjectDb($connectionKey);
+
+        if (!$connName) {
+            return response()->json(['success' => false, 'error' => 'No database configured']);
+        }
+
+        try {
+            // Count first before deleting (get a fresh count query)
+            $count = DB::connection($connName)->table($table)->onlyTrashed()->count();
+            // Force delete all soft-deleted rows
+            DB::connection($connName)->table($table)->onlyTrashed()->forceDelete();
+
+            return response()->json(['success' => true, 'count' => $count]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
     public function updateRow(Request $request, string $table)
     {
         $connectionKey = $request->get('connection', 'primary');
@@ -97,11 +242,11 @@ class DatabaseController extends Controller
             $column = $request->input('column');
             $value = $request->input('value');
 
-            // Detect primary key column
-            $columns = \Schema::connection($connName)->getColumnListing($table);
+            // Get actual primary key for this table
+            $primaryKey = $this->dbService->getPrimaryKey($connName, $table);
 
             DB::connection($connName)->table($table)
-                ->where('id', $id)
+                ->where($primaryKey, $id)
                 ->update([$column => $value]);
 
             return response()->json(['success' => true]);
@@ -120,7 +265,21 @@ class DatabaseController extends Controller
         }
 
         try {
-            DB::connection($connName)->table($table)->where('id', $id)->delete();
+            $primaryKey = $this->dbService->getPrimaryKey($connName, $table);
+
+            // Check if table supports soft deletes
+            if ($this->dbService->detectSoftDeletes($connName, $table)) {
+                // Soft delete: set deleted_at to current timestamp
+                DB::connection($connName)->table($table)
+                    ->where($primaryKey, $id)
+                    ->update(['deleted_at' => now()]);
+            } else {
+                // Hard delete for tables without deleted_at column
+                DB::connection($connName)->table($table)
+                    ->where($primaryKey, $id)
+                    ->delete();
+            }
+
             return response()->json(['success' => true]);
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'error' => $e->getMessage()]);

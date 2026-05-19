@@ -132,6 +132,19 @@ class ProjectService
     public function getActiveProject(): ?array
     {
         $activeName = session('active_project');
+
+        // Auto-set default project from env if no active project
+        if (!$activeName) {
+            $default = config('panel.default_project');
+            if ($default) {
+                $projects = $this->getAllProjects();
+                if (isset($projects[$default])) {
+                    session(['active_project' => $default]);
+                    $activeName = $default;
+                }
+            }
+        }
+
         if (!$activeName) {
             return null;
         }

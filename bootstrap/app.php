@@ -15,6 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'owner.access' => \App\Http\Middleware\OwnerAccess::class,
         ]);
+        // Disable CSRF for panel/api AJAX routes
+        $middleware->preventRequestForgery(['panel/api/*']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
