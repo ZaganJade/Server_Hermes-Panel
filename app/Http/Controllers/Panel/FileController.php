@@ -15,7 +15,7 @@ class FileController extends Controller
         protected ProjectService $projectService,
     ) {}
 
-public function index(Request $request)
+    public function index(Request $request)
     {
         $activeProject = $this->projectService->getActiveProject();
 
@@ -32,13 +32,10 @@ public function index(Request $request)
     public function listFiles(Request $request)
     {
         $path = $request->get('path', '/');
-        
-        // Allow project override via query param to bypass session mismatch
-        $projectOverride = $request->get('project');
-        if ($projectOverride) {
-            $this->projectService->switchProject($projectOverride);
-        }
-        
+
+        // Project switch via GET was a CSRF / state-tampering surface
+        // because /panel/api/* is exempt from CSRF. Force callers to
+        // POST to /api/files/switch-project instead.
         $activeProject = $this->projectService->getActiveProject();
 
         $listing = $this->fileService->listDirectory($path);
@@ -49,6 +46,26 @@ public function index(Request $request)
         ] : null;
 
         return response()->json($listing);
+    }
+
+    /**
+     * Explicitly switch the active project. POST-only — see listFiles().
+     */
+    public function switchProject(Request $request)
+    {
+        $project = (string) $request->input('project', '');
+
+        if ($project === '') {
+            return response()->json(['success' => false, 'error' => 'project is required'], 422);
+        }
+
+        $ok = $this->projectService->switchProject($project);
+
+        if (! $ok) {
+            return response()->json(['success' => false, 'error' => 'Project not found'], 404);
+        }
+
+        return response()->json(['success' => true, 'project' => $project]);
     }
 
     public function getContext(Request $request)
@@ -128,7 +145,7 @@ public function index(Request $request)
         $path = $request->input('path', '/');
         $file = $request->file('file');
 
-        if (!$file) {
+        if (! $file) {
             return response()->json(['success' => false, 'error' => 'No file uploaded']);
         }
 
@@ -140,17 +157,17 @@ public function index(Request $request)
         $path = $request->get('path', '');
         $result = $this->fileService->download($path);
 
-        if (!$result) {
+        if (! $result) {
             return response()->json(['error' => 'File not found'], 404);
         }
 
         if ($result['is_directory']) {
             $zipPath = $this->fileService->zipDirectory($path);
-            if (!$zipPath) {
+            if (! $zipPath) {
                 return response()->json(['error' => 'Failed to create zip'], 500);
             }
 
-            return Response::download($zipPath, $result['name'] . '.zip')->deleteFileAfterSend(true);
+            return Response::download($zipPath, $result['name'].'.zip')->deleteFileAfterSend(true);
         }
 
         return Response::download($result['path'], $result['name']);

@@ -417,31 +417,59 @@ class DatabaseService
      */
     public function exportTable(string $connectionName, string $table, string $format): array
     {
-        $data = DB::connection($connectionName)->table($table)->get();
+        if (! $this->isValidSqlIdentifier($table)) {
+            return ['filename' => '', 'content' => '', 'format' => $format];
+        }
+
+        if (! in_array($format, ['json', 'csv'], true)) {
+            return ['filename' => '', 'content' => '', 'format' => $format];
+        }
+
+        // Stream rows in chunks instead of loading the whole table at once.
+        // Caps export at EXPORT_ROW_CAP rows so a runaway export can't OOM
+        // the panel — callers needing more should use mysqldump via SSH.
+        $cap = (int) config('panel.export_row_cap', 100_000);
+
         $timestamp = now()->format('Ymd_His');
         $filename = "{$table}_{$timestamp}.{$format}";
+
+        $rows = [];
+        $count = 0;
+
+        DB::connection($connectionName)
+            ->table($table)
+            ->orderBy(DB::connection($connectionName)->raw('1'))
+            ->chunk(1000, function ($chunk) use (&$rows, &$count, $cap) {
+                foreach ($chunk as $row) {
+                    if ($count >= $cap) {
+                        return false;
+                    }
+                    $rows[] = (array) $row;
+                    $count++;
+                }
+            });
 
         if ($format === 'json') {
             $content = json_encode([
                 'table' => $table,
                 'exported_at' => now()->toIso8601String(),
-                'row_count' => count($data),
-                'data' => $data,
+                'row_count' => $count,
+                'capped' => $count >= $cap,
+                'data' => $rows,
             ], JSON_PRETTY_PRINT);
         } else {
             // CSV
-            $rows = $data->toArray();
-            if (empty($rows)) {
+            if ($rows === []) {
                 $content = '';
             } else {
-                $headers = array_keys((array) $rows[0]);
+                $headers = array_keys($rows[0]);
                 $lines = [implode(',', $headers)];
                 foreach ($rows as $row) {
                     $values = array_map(function ($val) {
                         $val = str_replace('"', '""', (string) $val);
 
                         return "\"{$val}\"";
-                    }, (array) $row);
+                    }, $row);
                     $lines[] = implode(',', $values);
                 }
                 $content = implode("\n", $lines);
@@ -477,7 +505,10 @@ class DatabaseService
 
         try {
             $columns = [];
-            $rows = DB::connection($connectionName)->select("DESCRIBE `{$table}`");
+            // Identifier already validated by isValidSqlIdentifier(); MySQL
+            // bind params can't substitute identifiers, so we interpolate
+            // and rely on the regex gate above.
+            $rows = DB::connection($connectionName)->select('DESCRIBE `'.$table.'`');
 
             foreach ($rows as $row) {
                 $type = 'varchar';
@@ -504,12 +535,13 @@ class DatabaseService
         } catch (\Throwable $e) {
             // Try PostgreSQL
             try {
-                $rows = DB::connection($connectionName)->select("
-                    SELECT column_name as field, data_type as type, is_nullable as null, column_default as default
+                $rows = DB::connection($connectionName)->select(
+                    'SELECT column_name as field, data_type as type, is_nullable as nullable, column_default as default_value
                     FROM information_schema.columns
-                    WHERE table_name = '{$table}'
-                    ORDER BY ordinal_position
-                ");
+                    WHERE table_name = ?
+                    ORDER BY ordinal_position',
+                    [$table],
+                );
 
                 $columns = [];
                 foreach ($rows as $row) {
@@ -517,9 +549,9 @@ class DatabaseService
                         'name' => $row->field,
                         'type' => strtolower($row->type),
                         'type_args' => null,
-                        'nullable' => $row->null === 'YES',
+                        'nullable' => $row->nullable === 'YES',
                         'key' => '',
-                        'default' => $row->default,
+                        'default' => $row->default_value,
                         'extra' => '',
                     ];
                 }
@@ -557,7 +589,9 @@ class DatabaseService
         }
 
         try {
-            $result = DB::connection($connectionName)->select("SHOW KEYS FROM `{$table}` WHERE Key_name = 'PRIMARY'");
+            // Identifier already validated; MySQL can't bind identifiers.
+            $result = DB::connection($connectionName)
+                ->select('SHOW KEYS FROM `'.$table."` WHERE Key_name = 'PRIMARY'");
             if (! empty($result)) {
                 return $result[0]->Column_name;
             }

@@ -46,6 +46,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | WhatsApp Gateway Bypass
+    |--------------------------------------------------------------------------
+    | The X-WA-Sender header is user-controllable, so on a public domain we
+    | only honour it from a known gateway IP and (optionally) when it carries
+    | a valid HMAC signature. Defaults to loopback-only.
+    |
+    | PANEL_GATEWAY_IPS:    comma-separated allowlist of IPs (defaults to
+    |                       127.0.0.1 / ::1 when empty)
+    | PANEL_GATEWAY_SECRET: HMAC-SHA256 secret. When set, gateways must send
+    |                       X-WA-Signature: hex(hmac_sha256(secret, sender))
+    */
+    'gateway_ips' => array_values(array_filter(
+        array_map('trim', explode(',', (string) env('PANEL_GATEWAY_IPS', ''))),
+        fn ($ip) => $ip !== '',
+    )),
+
+    'gateway_secret' => env('PANEL_GATEWAY_SECRET', ''),
+
+    /*
+    |--------------------------------------------------------------------------
     | Projects Directory
     |--------------------------------------------------------------------------
     | Relative to panel root. All managed projects reside here.

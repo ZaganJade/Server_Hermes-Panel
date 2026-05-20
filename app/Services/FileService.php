@@ -346,6 +346,10 @@ class FileService
 
     /**
      * Create zip archive of a directory.
+     *
+     * Caps total bytes and entry count so a malicious or just-curious caller
+     * can't OOM the panel by zipping `vendor/` or `node_modules/`. Caps come
+     * from `panel.zip_max_bytes` and `panel.zip_max_entries`.
      */
     public function zipDirectory(string $relativePath): ?string
     {
@@ -355,6 +359,9 @@ class FileService
             return null;
         }
 
+        $maxBytes = (int) config('panel.zip_max_bytes', 1_073_741_824);   // 1 GB
+        $maxEntries = (int) config('panel.zip_max_entries', 50_000);
+
         $zipFile = tempnam(sys_get_temp_dir(), 'hermes_zip_').'.zip';
         $zip = new \ZipArchive;
 
@@ -362,8 +369,15 @@ class FileService
             return null;
         }
 
-        $this->zipRecursive($zip, $fullPath, basename($fullPath));
+        $stats = ['bytes' => 0, 'entries' => 0, 'aborted' => false];
+        $this->zipRecursive($zip, $fullPath, basename($fullPath), $stats, $maxBytes, $maxEntries);
         $zip->close();
+
+        if ($stats['aborted']) {
+            @unlink($zipFile);
+
+            return null;
+        }
 
         return $zipFile;
     }
@@ -612,11 +626,21 @@ class FileService
         }
     }
 
-    protected function zipRecursive(\ZipArchive $zip, string $dir, string $baseName): void
+    protected function zipRecursive(\ZipArchive $zip, string $dir, string $baseName, array &$stats, int $maxBytes, int $maxEntries): void
     {
+        if ($stats['aborted']) {
+            return;
+        }
+
         foreach (scandir($dir) as $entry) {
             if ($entry === '.' || $entry === '..') {
                 continue;
+            }
+
+            if ($stats['entries'] >= $maxEntries || $stats['bytes'] >= $maxBytes) {
+                $stats['aborted'] = true;
+
+                return;
             }
 
             $path = $dir.'/'.$entry;
@@ -624,9 +648,18 @@ class FileService
 
             if (is_dir($path)) {
                 $zip->addEmptyDir($zipPath);
-                $this->zipRecursive($zip, $path, $zipPath);
+                $stats['entries']++;
+                $this->zipRecursive($zip, $path, $zipPath, $stats, $maxBytes, $maxEntries);
             } else {
+                $size = (int) @filesize($path);
+                if ($maxBytes < $stats['bytes'] + $size) {
+                    $stats['aborted'] = true;
+
+                    return;
+                }
                 $zip->addFile($path, $zipPath);
+                $stats['entries']++;
+                $stats['bytes'] += $size;
             }
         }
     }
