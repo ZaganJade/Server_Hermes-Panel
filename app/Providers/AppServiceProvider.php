@@ -4,8 +4,12 @@ namespace App\Providers;
 
 use App\Services\Monitoring\MetricCollector;
 use App\Services\Monitoring\ProcResolver;
+use App\Services\Monitoring\Readers\ConnectionReader;
 use App\Services\Monitoring\Readers\CpuReader;
+use App\Services\Monitoring\Readers\DiskIoReader;
+use App\Services\Monitoring\Readers\DiskUsageReader;
 use App\Services\Monitoring\Readers\MemoryReader;
+use App\Services\Monitoring\Readers\NetworkReader;
 use App\Services\Monitoring\Readers\UptimeReader;
 use App\Services\ProjectService;
 use App\Services\TerminalCommandPolicy;
@@ -36,12 +40,18 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ProcResolver::class, fn () => ProcResolver::autodetect());
 
         // Tag readers so MetricCollector can iterate them generically.
-        // Story v3.2-02 starts the list with Cpu/Memory/Uptime; later
-        // stories append more without touching the collector.
+        // Story v3.2-02 starts the list with Cpu/Memory/Uptime; story
+        // v3.2-03 adds disk + network + connection readers; story
+        // v3.2-04 adds process/service/port readers without touching
+        // the collector.
         $this->app->tag([
             CpuReader::class,
             MemoryReader::class,
             UptimeReader::class,
+            DiskUsageReader::class,
+            DiskIoReader::class,
+            NetworkReader::class,
+            ConnectionReader::class,
         ], 'monitoring.readers');
 
         $this->app->singleton(MetricCollector::class, fn ($app) => new MetricCollector(

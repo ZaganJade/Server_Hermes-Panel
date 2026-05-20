@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 2
   stories_created: 16
-  stories_completed: 10
+  stories_completed: 11
   active_sprint: "v3.2"
   sprints:
     - id: "v3.1"
@@ -75,7 +75,7 @@ phase_4_implementation:
       stories:
         - { id: "v3.2-01", title: "Mount /proc, /sys + ProcResolver",                       status: "done",  deps: [] }
         - { id: "v3.2-02", title: "Reader interface + Cpu/Memory/Uptime readers",          status: "done",  deps: ["v3.2-01"] }
-        - { id: "v3.2-03", title: "DiskUsage/DiskIo/Network/Connection readers",            status: "ready", deps: ["v3.2-02"] }
+        - { id: "v3.2-03", title: "DiskUsage/DiskIo/Network/Connection readers",            status: "done",  deps: ["v3.2-02"] }
         - { id: "v3.2-04", title: "Process/Service/Port readers + whitelist patterns",      status: "ready", deps: ["v3.2-02"] }
         - { id: "v3.2-05", title: "MetricStorage SQLite schema + WAL + aggregate/prune",    status: "ready", deps: ["v3.2-02"] }
         - { id: "v3.2-06", title: "MonitoringTickLoop + supervisord + ThresholdEvaluator",   status: "ready", deps: ["v3.2-03", "v3.2-04", "v3.2-05"] }
@@ -580,3 +580,24 @@ workflow_log:
       new_tests: 14
       new_assertions: 55
     note: "CpuReader is delta-aware (caches /proc/stat cumulative columns under hermes:monitoring:last:cpu). First sample marks first_sample=true so storage layer skips rate-based aggregation. MetricCollector logs reader failures only when monitoring-tick channel is registered (story 06) — keeps story 02 self-contained."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-03"
+    title: "DiskUsage/DiskIo/Network/Connection readers"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "app/Services/Monitoring/Readers/DiskUsageReader.php (new, df shell-out)"
+      - "app/Services/Monitoring/Readers/DiskIoReader.php (new, delta-aware /proc/diskstats)"
+      - "app/Services/Monitoring/Readers/NetworkReader.php (new, delta-aware /proc/net/dev)"
+      - "app/Services/Monitoring/Readers/ConnectionReader.php (new, /proc/net/tcp{,6})"
+      - "app/Providers/AppServiceProvider.php (4 readers added to monitoring.readers tag)"
+      - "tests/Fixtures/Monitoring/proc/{diskstats-first,diskstats-second,net-dev-first,net-dev-second,net-tcp,net-tcp6} (new)"
+      - "tests/Unit/Services/Monitoring/Readers/{DiskUsage,DiskIo,Network,Connection}ReaderTest.php (new)"
+    tests:
+      total: 124
+      passed: 124
+      assertions: 320
+      new_tests: 9
+      new_assertions: 54
+    note: "All 4 readers handle their delta/first-sample edge case: DiskIo and Network mark first_sample=true and return null rates on first call. df --output replaces -P flag (mutually exclusive on GNU coreutils). Loop/ram devices filtered from disk I/O; lo + zero-traffic interfaces filtered from network. Connection reader gracefully handles missing /proc/net/tcp6."
