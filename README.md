@@ -497,13 +497,42 @@ v3.1 introduced.
 - Host `/proc` and `/sys` are mounted read-only into the container at `/host/proc` and `/host/sys` (see `docker-compose.yml`). Outside the container the panel reads directly from `/proc` and `/sys`.
 - A `ProcResolver` autodetects which root to use, so every reader stays portable across container, host, and dev runs.
 - Sample data lives in a dedicated SQLite at `storage/monitoring.sqlite` (WAL mode). Panel-DB outages don't affect monitoring, and vice versa.
+- A supervisord-managed `hermes:monitoring-tick` artisan command samples every 5 s, evaluates thresholds with hysteresis, persists raw samples (1 h retention) plus 1-minute aggregates (24 h retention), and broadcasts a `monitoring.snapshot` event on the private `monitoring.host` channel.
+
+**API surface**
+
+All under `/panel/api/monitoring`, behind the `OwnerAccess` middleware:
+
+| Method | Path                                       | Purpose                                                              |
+| ------ | ------------------------------------------ | -------------------------------------------------------------------- |
+| GET    | `/snapshot`                                | Latest sample (poll fallback for bypass mode + initial state)        |
+| GET    | `/series`                                  | Historical range query for charts (validates metrics + window)       |
+| GET    | `/services`                                | Service list with current status                                     |
+| GET    | `/processes`                               | Top processes (5 by CPU + 5 by RSS, deduped)                         |
+| GET    | `/ports`                                   | Listening ports                                                       |
+| GET    | `/alerts`                                  | Active threshold violations                                           |
+| POST   | `/services/refresh`                        | Force re-discover services (clears 60s cache)                         |
+
+Series resolution rules: `5m` / `15m` / `1h` returns raw 5-second
+samples; `6h` / `24h` returns 1-minute aggregates.
+
+**Threshold defaults**
+
+Four built-in rules in `config/panel.php`:
+
+- `cpu_load` — 1m loadavg, warning at 1.5× cores, critical at 2.0× cores, sustained 60 s
+- `mem_used` — 90% warning, 95% critical
+- `disk_used` — 90% warning, 95% critical (worst mount wins on glob)
+- `service_down` — critical when any expected-active service drops out (units must have been seen `active` within the last 5 minutes to be expected)
 
 **Status**
 
-v3.2 sub-project is split into 8 stories. As of this README, story 01
-(volume mounts + `ProcResolver`) is the foundation. Readers, storage,
-the tick-loop, HTTP API, and the floating dashboard land across stories
-02–08. See `docs/bmad/stories/v3.2-INDEX.md` for the full breakdown.
+v3.2 sub-project is split into 8 stories. Stories 01–07 are merged:
+ProcResolver, all 10 readers, MetricStorage, MonitoringTickLoop +
+ThresholdEvaluator, HTTP API + channel auth + OpenSpec capability
+spec. Story 08 wires up the Dashboard health strip, the dedicated
+`ζ Monitoring` tab with uPlot charts, and Playwright E2E. See
+`docs/bmad/stories/v3.2-INDEX.md` for the full breakdown.
 
 ---
 

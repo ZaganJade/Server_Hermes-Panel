@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 2
   stories_created: 16
-  stories_completed: 14
+  stories_completed: 15
   active_sprint: "v3.2"
   sprints:
     - id: "v3.1"
@@ -79,7 +79,7 @@ phase_4_implementation:
         - { id: "v3.2-04", title: "Process/Service/Port readers + whitelist patterns",      status: "done",  deps: ["v3.2-02"] }
         - { id: "v3.2-05", title: "MetricStorage SQLite schema + WAL + aggregate/prune",    status: "done",  deps: ["v3.2-02"] }
         - { id: "v3.2-06", title: "MonitoringTickLoop + supervisord + ThresholdEvaluator",   status: "done",  deps: ["v3.2-03", "v3.2-04", "v3.2-05"] }
-        - { id: "v3.2-07", title: "HTTP API + channel auth + MonitoringController + OpenSpec", status: "ready", deps: ["v3.2-05", "v3.2-06"] }
+        - { id: "v3.2-07", title: "HTTP API + channel auth + MonitoringController + OpenSpec", status: "done",  deps: ["v3.2-05", "v3.2-06"] }
         - { id: "v3.2-08", title: "Frontend (uPlot + Dashboard strip + full tab) + E2E",     status: "ready", deps: ["v3.2-07"] }
   umbrella:
     v3:
@@ -662,3 +662,25 @@ workflow_log:
       new_tests: 13
       new_assertions: 27
     note: "Tick-loop owns broadcasting + storage maintenance; service stays decoupled. ThresholdEvaluator handles hysteresis (level transitions only fire events), sustained-time rules (cpu_load needs 60s breach before firing), per-core CPU scaling, percentage-based rules (memory), disk glob rules (worst mount wins), and service_down rule (only fires for units previously seen active in last 5 min). 4 default thresholds in config: cpu_load, mem_used, disk_used, service_down."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-07"
+    title: "HTTP API + channel auth + OpenSpec"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "app/Http/Controllers/Panel/MonitoringController.php (new)"
+      - "routes/web.php (7 endpoints + monitoring page route)"
+      - "routes/channels.php (monitoring.host channel callback)"
+      - "resources/views/panel/monitoring.blade.php (stub view, full UI in story 08)"
+      - "openspec/changes/vps-monitoring-v32/specs/vps-monitoring/spec.md (new capability spec)"
+      - "README.md (VPS monitoring section expanded with API table + thresholds)"
+      - "tests/Feature/Panel/MonitoringApiTest.php (new, 10 tests)"
+      - "tests/Feature/Panel/MonitoringChannelAuthTest.php (new, 3 tests)"
+    tests:
+      total: 169
+      passed: 169
+      assertions: 461
+      new_tests: 13
+      new_assertions: 29
+    note: "All endpoints behind OwnerAccess middleware; throttle:30,1 not added since these are read-only GET endpoints (only refreshServices is POST and acceptable to call freely). Channel callback mirrors v3.1 terminal pattern. OpenSpec capability spec covers lifecycle, thresholds, HTTP surface, channel auth, and storage layout. README gets full API table + threshold defaults documented inline."
