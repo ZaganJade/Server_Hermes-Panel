@@ -2,7 +2,11 @@
 
 namespace App\Providers;
 
+use App\Services\Monitoring\MetricCollector;
 use App\Services\Monitoring\ProcResolver;
+use App\Services\Monitoring\Readers\CpuReader;
+use App\Services\Monitoring\Readers\MemoryReader;
+use App\Services\Monitoring\Readers\UptimeReader;
 use App\Services\ProjectService;
 use App\Services\TerminalCommandPolicy;
 use App\Services\TerminalSessionService;
@@ -30,6 +34,20 @@ class AppServiceProvider extends ServiceProvider
         // resolver autodetects /host/proc inside the container and falls
         // back to /proc on host/dev runs.
         $this->app->singleton(ProcResolver::class, fn () => ProcResolver::autodetect());
+
+        // Tag readers so MetricCollector can iterate them generically.
+        // Story v3.2-02 starts the list with Cpu/Memory/Uptime; later
+        // stories append more without touching the collector.
+        $this->app->tag([
+            CpuReader::class,
+            MemoryReader::class,
+            UptimeReader::class,
+        ], 'monitoring.readers');
+
+        $this->app->singleton(MetricCollector::class, fn ($app) => new MetricCollector(
+            $app->tagged('monitoring.readers'),
+            $app->make(ProcResolver::class),
+        ));
     }
 
     /**

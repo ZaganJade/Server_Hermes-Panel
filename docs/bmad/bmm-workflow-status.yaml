@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 2
   stories_created: 16
-  stories_completed: 9
+  stories_completed: 10
   active_sprint: "v3.2"
   sprints:
     - id: "v3.1"
@@ -74,7 +74,7 @@ phase_4_implementation:
       story_index: "docs/bmad/stories/v3.2-INDEX.md"
       stories:
         - { id: "v3.2-01", title: "Mount /proc, /sys + ProcResolver",                       status: "done",  deps: [] }
-        - { id: "v3.2-02", title: "Reader interface + Cpu/Memory/Uptime readers",          status: "ready", deps: ["v3.2-01"] }
+        - { id: "v3.2-02", title: "Reader interface + Cpu/Memory/Uptime readers",          status: "done",  deps: ["v3.2-01"] }
         - { id: "v3.2-03", title: "DiskUsage/DiskIo/Network/Connection readers",            status: "ready", deps: ["v3.2-02"] }
         - { id: "v3.2-04", title: "Process/Service/Port readers + whitelist patterns",      status: "ready", deps: ["v3.2-02"] }
         - { id: "v3.2-05", title: "MetricStorage SQLite schema + WAL + aggregate/prune",    status: "ready", deps: ["v3.2-02"] }
@@ -556,3 +556,27 @@ workflow_log:
       new_tests: 6
       new_assertions: 14
     note: "Foundation for v3.2 readers. Autodetect is OS-aware: returns /host/proc on Linux container, /proc on Linux host, both choices acceptable on Windows dev (filesystem reality not asserted there). Singleton binding ensures every reader gets the same resolved root."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-02"
+    title: "Reader interface + Cpu/Memory/Uptime readers + MetricCollector"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "app/Services/Monitoring/Reader.php (new interface)"
+      - "app/Services/Monitoring/Snapshot.php (new DTO)"
+      - "app/Services/Monitoring/MetricCollector.php (new orchestrator)"
+      - "app/Services/Monitoring/Readers/CpuReader.php (new, delta-aware)"
+      - "app/Services/Monitoring/Readers/MemoryReader.php (new)"
+      - "app/Services/Monitoring/Readers/UptimeReader.php (new)"
+      - "app/Providers/AppServiceProvider.php (monitoring.readers tag + collector singleton)"
+      - "tests/Fixtures/Monitoring/proc/{loadavg,meminfo,uptime,stat-first,stat-second} (new)"
+      - "tests/Unit/Services/Monitoring/MetricCollectorTest.php (new)"
+      - "tests/Unit/Services/Monitoring/Readers/{Cpu,Memory,Uptime}ReaderTest.php (new)"
+    tests:
+      total: 115
+      passed: 115
+      assertions: 266
+      new_tests: 14
+      new_assertions: 55
+    note: "CpuReader is delta-aware (caches /proc/stat cumulative columns under hermes:monitoring:last:cpu). First sample marks first_sample=true so storage layer skips rate-based aggregation. MetricCollector logs reader failures only when monitoring-tick channel is registered (story 06) — keeps story 02 self-contained."
