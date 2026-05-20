@@ -5,7 +5,7 @@ project_name: "Hermes Panel"
 project_level: 3
 adoption_strategy: "forward-only"
 last_workflow: "sprint-close"
-last_workflow_date: "2026-05-19"
+last_workflow_date: "2026-05-20"
 initialized_at: "2026-05-19"
 initialized_by: "manual setup (Strategy A: forward-only)"
 
@@ -48,9 +48,9 @@ phase_3_solutioning:
 
 # Phase 4: Implementation (Development)
 phase_4_implementation:
-  sprints_planned: 1
-  stories_created: 8
-  stories_completed: 8
+  sprints_planned: 2
+  stories_created: 16
+  stories_completed: 16
   active_sprint: null
   sprints:
     - id: "v3.1"
@@ -67,12 +67,26 @@ phase_4_implementation:
         - { id: "v3.1-06", title: "Frontend bundle: Alpine npm + Echo + xterm",      status: "done",  deps: ["v3.1-01"] }
         - { id: "v3.1-07", title: "Floating panel UI + Alpine component",            status: "done",  deps: ["v3.1-05", "v3.1-06"] }
         - { id: "v3.1-08", title: "Idle timeout default 15min + polish + E2E",       status: "done",  deps: ["v3.1-07"] }
+    - id: "v3.2"
+      title: "VPS monitoring (sub-project of v3 personal cockpit)"
+      branch: "feature/v3.2-vps-monitoring"
+      design_doc: "docs/superpowers/specs/2026-05-20-vps-monitoring-design.md"
+      story_index: "docs/bmad/stories/v3.2-INDEX.md"
+      stories:
+        - { id: "v3.2-01", title: "Mount /proc, /sys + ProcResolver",                       status: "done",  deps: [] }
+        - { id: "v3.2-02", title: "Reader interface + Cpu/Memory/Uptime readers",          status: "done",  deps: ["v3.2-01"] }
+        - { id: "v3.2-03", title: "DiskUsage/DiskIo/Network/Connection readers",            status: "done",  deps: ["v3.2-02"] }
+        - { id: "v3.2-04", title: "Process/Service/Port readers + whitelist patterns",      status: "done",  deps: ["v3.2-02"] }
+        - { id: "v3.2-05", title: "MetricStorage SQLite schema + WAL + aggregate/prune",    status: "done",  deps: ["v3.2-02"] }
+        - { id: "v3.2-06", title: "MonitoringTickLoop + supervisord + ThresholdEvaluator",   status: "done",  deps: ["v3.2-03", "v3.2-04", "v3.2-05"] }
+        - { id: "v3.2-07", title: "HTTP API + channel auth + MonitoringController + OpenSpec", status: "done",  deps: ["v3.2-05", "v3.2-06"] }
+        - { id: "v3.2-08", title: "Frontend (uPlot + Dashboard strip + full tab) + E2E",     status: "done",  deps: ["v3.2-07"] }
   umbrella:
     v3:
       title: "Hermes Panel v3 — Personal server cockpit"
       sub_projects:
         - { id: "v3.1", title: "Real-time terminal",            status: "done"   }
-        - { id: "v3.2", title: "VPS monitoring",                 status: "backlog" }
+        - { id: "v3.2", title: "VPS monitoring",                 status: "done"   }
         - { id: "v3.3", title: "Multi-language project layer",   status: "backlog" }
         - { id: "v3.4", title: "Server admin (aaPanel-lite)",    status: "backlog" }
 
@@ -509,3 +523,192 @@ workflow_log:
     title: "v3.1 real-time terminal sprint complete"
     stories_completed: 8
     note: "All 8 stories merged into feature/v3.1-realtime-terminal. Branch ready to merge into main."
+  - workflow: "brainstorming"
+    date: "2026-05-20"
+    sub_project: "v3.2"
+    output: "docs/superpowers/specs/2026-05-20-vps-monitoring-design.md"
+    skill: "brainstorming"
+    decisions: 13
+    note: "User-driven design session for VPS monitoring. Custom-built ringan (no Netdata), Tier 1+2 metrics, 5s sampling, private channel monitoring.host, view-only services, visual-only alerts, dedicated tick-loop, SQLite storage, uPlot, /proc /sys read-only mounts."
+  - workflow: "sprint-planning"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    branch: "feature/v3.2-vps-monitoring"
+    stories_created: 8
+    story_index: "docs/bmad/stories/v3.2-INDEX.md"
+    note: "v3.2 sub-project decomposed into 8 stories. 1-2 independent of v3.1, 3-5 share Reader infrastructure, 6 ties everything together, 7 exposes HTTP+channel, 8 closes with frontend+E2E. Worked directly on feature branch (no story branches), per v3.1 final pattern."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-01"
+    title: "Mount /proc, /sys + ProcResolver + autodetect"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "docker-compose.yml (read-only /proc and /sys mounts)"
+      - "app/Services/Monitoring/ProcResolver.php (new)"
+      - "app/Providers/AppServiceProvider.php (singleton binding)"
+      - "tests/Unit/Services/Monitoring/ProcResolverTest.php (new)"
+      - "README.md (VPS monitoring stub section)"
+    tests:
+      total: 101
+      passed: 101
+      assertions: 211
+      new_tests: 6
+      new_assertions: 14
+    note: "Foundation for v3.2 readers. Autodetect is OS-aware: returns /host/proc on Linux container, /proc on Linux host, both choices acceptable on Windows dev (filesystem reality not asserted there). Singleton binding ensures every reader gets the same resolved root."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-02"
+    title: "Reader interface + Cpu/Memory/Uptime readers + MetricCollector"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "app/Services/Monitoring/Reader.php (new interface)"
+      - "app/Services/Monitoring/Snapshot.php (new DTO)"
+      - "app/Services/Monitoring/MetricCollector.php (new orchestrator)"
+      - "app/Services/Monitoring/Readers/CpuReader.php (new, delta-aware)"
+      - "app/Services/Monitoring/Readers/MemoryReader.php (new)"
+      - "app/Services/Monitoring/Readers/UptimeReader.php (new)"
+      - "app/Providers/AppServiceProvider.php (monitoring.readers tag + collector singleton)"
+      - "tests/Fixtures/Monitoring/proc/{loadavg,meminfo,uptime,stat-first,stat-second} (new)"
+      - "tests/Unit/Services/Monitoring/MetricCollectorTest.php (new)"
+      - "tests/Unit/Services/Monitoring/Readers/{Cpu,Memory,Uptime}ReaderTest.php (new)"
+    tests:
+      total: 115
+      passed: 115
+      assertions: 266
+      new_tests: 14
+      new_assertions: 55
+    note: "CpuReader is delta-aware (caches /proc/stat cumulative columns under hermes:monitoring:last:cpu). First sample marks first_sample=true so storage layer skips rate-based aggregation. MetricCollector logs reader failures only when monitoring-tick channel is registered (story 06) — keeps story 02 self-contained."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-03"
+    title: "DiskUsage/DiskIo/Network/Connection readers"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "app/Services/Monitoring/Readers/DiskUsageReader.php (new, df shell-out)"
+      - "app/Services/Monitoring/Readers/DiskIoReader.php (new, delta-aware /proc/diskstats)"
+      - "app/Services/Monitoring/Readers/NetworkReader.php (new, delta-aware /proc/net/dev)"
+      - "app/Services/Monitoring/Readers/ConnectionReader.php (new, /proc/net/tcp{,6})"
+      - "app/Providers/AppServiceProvider.php (4 readers added to monitoring.readers tag)"
+      - "tests/Fixtures/Monitoring/proc/{diskstats-first,diskstats-second,net-dev-first,net-dev-second,net-tcp,net-tcp6} (new)"
+      - "tests/Unit/Services/Monitoring/Readers/{DiskUsage,DiskIo,Network,Connection}ReaderTest.php (new)"
+    tests:
+      total: 124
+      passed: 124
+      assertions: 320
+      new_tests: 9
+      new_assertions: 54
+    note: "All 4 readers handle their delta/first-sample edge case: DiskIo and Network mark first_sample=true and return null rates on first call. df --output replaces -P flag (mutually exclusive on GNU coreutils). Loop/ram devices filtered from disk I/O; lo + zero-traffic interfaces filtered from network. Connection reader gracefully handles missing /proc/net/tcp6."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-04"
+    title: "Process/Service/Port readers + whitelist patterns"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "app/Services/Monitoring/Readers/ProcessReader.php (new, top 5 CPU + top 5 RSS deduped)"
+      - "app/Services/Monitoring/Readers/ServiceReader.php (new, systemctl + pgrep fallback)"
+      - "app/Services/Monitoring/Readers/PortReader.php (new, ss + netstat fallback)"
+      - "config/panel.php (monitoring.service_patterns added)"
+      - "app/Providers/AppServiceProvider.php (3 readers added to monitoring.readers tag)"
+      - "tests/Unit/Services/Monitoring/Readers/{Process,Service,Port}ReaderTest.php (new)"
+    tests:
+      total: 135
+      passed: 135
+      assertions: 363
+      new_tests: 11
+      new_assertions: 43
+    note: "ProcessReader walks /proc/<pid> via opendir, deduped to ≤10 rows. ServiceReader caches discovery 60s under hermes:monitoring:services:units; pgrep fallback strips '*' suffix from patterns. PortReader subclass-mocked in tests since ss/netstat are external. PortReader and ServiceReader dropped 'final' so test fakes can extend their command-running protected methods. Patterns config: nginx*, mysql*, postgres*, redis*, php-fpm*, docker, caddy, traefik (overridable via PANEL_* env in story 06)."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-05"
+    title: "MetricStorage SQLite schema + WAL + aggregate/prune"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "config/database.php (monitoring connection added with WAL + busy_timeout=5000)"
+      - "app/Services/Monitoring/MetricStorage.php (new)"
+      - "app/Providers/AppServiceProvider.php (singleton binding)"
+      - "tests/Unit/Services/Monitoring/MetricStorageTest.php (new, in-memory SQLite)"
+    tests:
+      total: 143
+      passed: 143
+      assertions: 405
+      new_tests: 8
+      new_assertions: 42
+    note: "Storage layer is broadcast-agnostic. Single-writer (monitoring-tick) + multi-reader (HTTP) on WAL mode. flattenForRaw skips first_sample rate fields so uninitialized counters never reach time-series. Discrete state (process/service/port lists) lives only in latest_snapshot JSON blob. Tests use Capsule-managed :memory: SQLite to avoid touching the real storage path. PRAGMA wal_checkpoint(TRUNCATE) runs after prune to reclaim WAL disk space — wrapped in try/catch so it's best-effort, never fatal."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-06"
+    title: "MonitoringTickLoop + supervisord + ThresholdEvaluator"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "app/Events/MonitoringAlert.php (new in-process event)"
+      - "app/Events/MonitoringSnapshot.php (new ShouldBroadcast event on private monitoring.host)"
+      - "app/Services/Monitoring/ThresholdEvaluator.php (new)"
+      - "app/Console/Commands/MonitoringTickLoop.php (new artisan hermes:monitoring-tick)"
+      - "config/panel.php (4 default threshold rules)"
+      - "config/logging.php (monitoring-tick log channel)"
+      - "docker/supervisord.conf (monitoring-tick program entry)"
+      - "tests/Unit/Services/Monitoring/ThresholdEvaluatorTest.php (new)"
+      - "tests/Feature/Console/MonitoringTickLoopTest.php (new)"
+    tests:
+      total: 156
+      passed: 156
+      assertions: 432
+      new_tests: 13
+      new_assertions: 27
+    note: "Tick-loop owns broadcasting + storage maintenance; service stays decoupled. ThresholdEvaluator handles hysteresis (level transitions only fire events), sustained-time rules (cpu_load needs 60s breach before firing), per-core CPU scaling, percentage-based rules (memory), disk glob rules (worst mount wins), and service_down rule (only fires for units previously seen active in last 5 min). 4 default thresholds in config: cpu_load, mem_used, disk_used, service_down."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-07"
+    title: "HTTP API + channel auth + OpenSpec"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "app/Http/Controllers/Panel/MonitoringController.php (new)"
+      - "routes/web.php (7 endpoints + monitoring page route)"
+      - "routes/channels.php (monitoring.host channel callback)"
+      - "resources/views/panel/monitoring.blade.php (stub view, full UI in story 08)"
+      - "openspec/changes/vps-monitoring-v32/specs/vps-monitoring/spec.md (new capability spec)"
+      - "README.md (VPS monitoring section expanded with API table + thresholds)"
+      - "tests/Feature/Panel/MonitoringApiTest.php (new, 10 tests)"
+      - "tests/Feature/Panel/MonitoringChannelAuthTest.php (new, 3 tests)"
+    tests:
+      total: 169
+      passed: 169
+      assertions: 461
+      new_tests: 13
+      new_assertions: 29
+    note: "All endpoints behind OwnerAccess middleware; throttle:30,1 not added since these are read-only GET endpoints (only refreshServices is POST and acceptable to call freely). Channel callback mirrors v3.1 terminal pattern. OpenSpec capability spec covers lifecycle, thresholds, HTTP surface, channel auth, and storage layout. README gets full API table + threshold defaults documented inline."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-08"
+    title: "Frontend (uPlot + Dashboard strip + full tab) + E2E + sprint close"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "package.json + package-lock.json (npm install uplot)"
+      - "resources/js/monitoring/{index,charts,series,snapshot-store}.js (new)"
+      - "resources/js/app.js (Alpine factory registration)"
+      - "resources/views/panel/_dashboard_health_strip.blade.php (new partial)"
+      - "resources/views/panel/monitoring.blade.php (full tab UI)"
+      - "resources/views/panel/dashboard.blade.php (include health strip)"
+      - "resources/views/panel/layout.blade.php (sidebar ζ Monitoring tab)"
+      - "tests/e2e/monitoring.spec.ts (new Playwright spec)"
+      - "agents.md (section 15 v3.2 status: backlog → DONE)"
+    bundle_sizes:
+      app_js_raw_kb: 566.55
+      app_js_gzipped_kb: 162.50
+      target_gzipped_kb: 250
+      target_met: true
+    note: "MonitoringSnapshotStore singleton fans the WS stream out to multiple Alpine components. Bypass mode + missing Echo gracefully fall back to HTTP polling at 5s. uPlot themed via copper/rust/verdigris/paper palette tokens. Sidebar ζ Monitoring tab added to all 3 nav variants (desktop sidebar, mobile sidebar, mobile bottom nav). Health strip + monitoring tab share the same store instance for consistent reactivity. E2E spec covers strip rendering, navigation to tab, and window selector triggering /series fetch — skip-when-unreachable wrapper keeps CI green without a running container."
+  - workflow: "sprint-close"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    title: "v3.2 VPS monitoring sprint complete"
+    stories_completed: 8
+    note: "All 8 stories merged into feature/v3.2-vps-monitoring. Branch ready to merge into main. Pending decisions from earlier rescans: monitoring foundation done; v3.3 multi-language and v3.4 server admin remain in backlog."

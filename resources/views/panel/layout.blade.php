@@ -47,7 +47,8 @@
                 'database'  => ['β', 'Database',  '002'],
                 'files'     => ['γ', 'Files',     '003'],
                 'tools'     => ['δ', 'Tools',     '004'],
-                'projects'  => ['ε', 'Projects',  '005'],
+                'projects'   => ['ε', 'Projects',  '005'],
+                'monitoring' => ['ζ', 'Monitoring', '006'],
             ] as $route => [$glyph, $label, $num])
             @php $active = request()->routeIs("panel.$route"); @endphp
             <a href="{{ route("panel.$route") }}"
@@ -120,7 +121,8 @@
                 'database'  => ['β', 'Database',  '002'],
                 'files'     => ['γ', 'Files',     '003'],
                 'tools'     => ['δ', 'Tools',     '004'],
-                'projects'  => ['ε', 'Projects',  '005'],
+                'projects'   => ['ε', 'Projects',  '005'],
+                'monitoring' => ['ζ', 'Monitoring', '006'],
             ] as $route => [$glyph, $label, $num])
             @php $active = request()->routeIs("panel.$route"); @endphp
             <a href="{{ route("panel.$route") }}" @click="mobileMenu = false"
@@ -192,7 +194,8 @@
                 'database'  => ['β', 'Data',     route('panel.database')],
                 'files'     => ['γ', 'Berkas',  route('panel.files')],
                 'tools'     => ['δ', 'Tools',    route('panel.tools')],
-                'projects'  => ['ε', 'Proyek',   route('panel.projects')],
+                'projects'   => ['ε', 'Proyek',   route('panel.projects')],
+                'monitoring' => ['ζ', 'Monitor',  route('panel.monitoring')],
             ] as $route => [$glyph, $label, $url])
             @php $active = request()->routeIs("panel.$route"); @endphp
             <a href="{{ $url }}"

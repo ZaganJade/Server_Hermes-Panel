@@ -5,6 +5,7 @@ use App\Http\Controllers\Panel\AuthController;
 use App\Http\Controllers\Panel\DashboardController;
 use App\Http\Controllers\Panel\DatabaseController;
 use App\Http\Controllers\Panel\FileController;
+use App\Http\Controllers\Panel\MonitoringController;
 use App\Http\Controllers\Panel\ProjectController;
 use App\Http\Controllers\Panel\TerminalController;
 use App\Http\Controllers\Panel\ToolController;
@@ -47,6 +48,7 @@ Route::prefix('panel')->name('panel.')->middleware('owner.access')->group(functi
     Route::get('/files', [FileController::class, 'index'])->name('files');
     Route::get('/tools', [ToolController::class, 'index'])->name('tools');
     Route::get('/projects', [ProjectController::class, 'index'])->name('projects');
+    Route::get('/monitoring', [MonitoringController::class, 'index'])->name('monitoring');
 
     // AJAX: Dashboard
     Route::post('/api/quick/cache-clear', [DashboardController::class, 'cacheClear'])->name('api.cache-clear');
@@ -113,6 +115,15 @@ Route::prefix('panel')->name('panel.')->middleware('owner.access')->group(functi
         ->name('api.terminal-replay');
     Route::post('/api/terminal/reset', [TerminalController::class, 'reset'])->name('api.terminal-reset');
     Route::delete('/api/terminal/history', [TerminalController::class, 'clearHistory'])->name('api.terminal-history-clear');
+
+    // AJAX: Monitoring
+    Route::get('/api/monitoring/snapshot', [MonitoringController::class, 'snapshot'])->name('api.monitoring-snapshot');
+    Route::get('/api/monitoring/series', [MonitoringController::class, 'series'])->name('api.monitoring-series');
+    Route::get('/api/monitoring/services', [MonitoringController::class, 'services'])->name('api.monitoring-services');
+    Route::get('/api/monitoring/processes', [MonitoringController::class, 'processes'])->name('api.monitoring-processes');
+    Route::get('/api/monitoring/ports', [MonitoringController::class, 'ports'])->name('api.monitoring-ports');
+    Route::get('/api/monitoring/alerts', [MonitoringController::class, 'alerts'])->name('api.monitoring-alerts');
+    Route::post('/api/monitoring/services/refresh', [MonitoringController::class, 'refreshServices'])->name('api.monitoring-services-refresh');
 
     // AJAX: Projects
     Route::post('/api/projects/switch', [ProjectController::class, 'switchProject'])->name('api.project-switch');
