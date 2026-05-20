@@ -4,8 +4,8 @@
 project_name: "Hermes Panel"
 project_level: 3
 adoption_strategy: "forward-only"
-last_workflow: "sprint-close"
-last_workflow_date: "2026-05-19"
+last_workflow: "sprint-planning"
+last_workflow_date: "2026-05-20"
 initialized_at: "2026-05-19"
 initialized_by: "manual setup (Strategy A: forward-only)"
 
@@ -48,10 +48,10 @@ phase_3_solutioning:
 
 # Phase 4: Implementation (Development)
 phase_4_implementation:
-  sprints_planned: 1
-  stories_created: 8
+  sprints_planned: 2
+  stories_created: 16
   stories_completed: 8
-  active_sprint: null
+  active_sprint: "v3.2"
   sprints:
     - id: "v3.1"
       title: "Real-time terminal (sub-project of v3 personal cockpit)"
@@ -67,12 +67,26 @@ phase_4_implementation:
         - { id: "v3.1-06", title: "Frontend bundle: Alpine npm + Echo + xterm",      status: "done",  deps: ["v3.1-01"] }
         - { id: "v3.1-07", title: "Floating panel UI + Alpine component",            status: "done",  deps: ["v3.1-05", "v3.1-06"] }
         - { id: "v3.1-08", title: "Idle timeout default 15min + polish + E2E",       status: "done",  deps: ["v3.1-07"] }
+    - id: "v3.2"
+      title: "VPS monitoring (sub-project of v3 personal cockpit)"
+      branch: "feature/v3.2-vps-monitoring"
+      design_doc: "docs/superpowers/specs/2026-05-20-vps-monitoring-design.md"
+      story_index: "docs/bmad/stories/v3.2-INDEX.md"
+      stories:
+        - { id: "v3.2-01", title: "Mount /proc, /sys + ProcResolver",                       status: "ready", deps: [] }
+        - { id: "v3.2-02", title: "Reader interface + Cpu/Memory/Uptime readers",          status: "ready", deps: ["v3.2-01"] }
+        - { id: "v3.2-03", title: "DiskUsage/DiskIo/Network/Connection readers",            status: "ready", deps: ["v3.2-02"] }
+        - { id: "v3.2-04", title: "Process/Service/Port readers + whitelist patterns",      status: "ready", deps: ["v3.2-02"] }
+        - { id: "v3.2-05", title: "MetricStorage SQLite schema + WAL + aggregate/prune",    status: "ready", deps: ["v3.2-02"] }
+        - { id: "v3.2-06", title: "MonitoringTickLoop + supervisord + ThresholdEvaluator",   status: "ready", deps: ["v3.2-03", "v3.2-04", "v3.2-05"] }
+        - { id: "v3.2-07", title: "HTTP API + channel auth + MonitoringController + OpenSpec", status: "ready", deps: ["v3.2-05", "v3.2-06"] }
+        - { id: "v3.2-08", title: "Frontend (uPlot + Dashboard strip + full tab) + E2E",     status: "ready", deps: ["v3.2-07"] }
   umbrella:
     v3:
       title: "Hermes Panel v3 — Personal server cockpit"
       sub_projects:
         - { id: "v3.1", title: "Real-time terminal",            status: "done"   }
-        - { id: "v3.2", title: "VPS monitoring",                 status: "backlog" }
+        - { id: "v3.2", title: "VPS monitoring",                 status: "active" }
         - { id: "v3.3", title: "Multi-language project layer",   status: "backlog" }
         - { id: "v3.4", title: "Server admin (aaPanel-lite)",    status: "backlog" }
 
@@ -509,3 +523,17 @@ workflow_log:
     title: "v3.1 real-time terminal sprint complete"
     stories_completed: 8
     note: "All 8 stories merged into feature/v3.1-realtime-terminal. Branch ready to merge into main."
+  - workflow: "brainstorming"
+    date: "2026-05-20"
+    sub_project: "v3.2"
+    output: "docs/superpowers/specs/2026-05-20-vps-monitoring-design.md"
+    skill: "brainstorming"
+    decisions: 13
+    note: "User-driven design session for VPS monitoring. Custom-built ringan (no Netdata), Tier 1+2 metrics, 5s sampling, private channel monitoring.host, view-only services, visual-only alerts, dedicated tick-loop, SQLite storage, uPlot, /proc /sys read-only mounts."
+  - workflow: "sprint-planning"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    branch: "feature/v3.2-vps-monitoring"
+    stories_created: 8
+    story_index: "docs/bmad/stories/v3.2-INDEX.md"
+    note: "v3.2 sub-project decomposed into 8 stories. 1-2 independent of v3.1, 3-5 share Reader infrastructure, 6 ties everything together, 7 exposes HTTP+channel, 8 closes with frontend+E2E. Worked directly on feature branch (no story branches), per v3.1 final pattern."
