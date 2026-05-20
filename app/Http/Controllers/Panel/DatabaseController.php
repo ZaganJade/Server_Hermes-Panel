@@ -15,8 +15,22 @@ class DatabaseController extends Controller
         protected ProjectService $projectService,
     ) {}
 
+    /**
+     * Per-request memo of (connectionKey => laravel-connection-name) so the
+     * SQL editor / table browser doesn't re-read `.env` and re-register a
+     * Laravel connection on every AJAX call. The controller is resolved
+     * fresh per request, so this map is naturally request-scoped.
+     *
+     * @var array<string, string>
+     */
+    protected array $configuredConnections = [];
+
     protected function configureActiveProjectDb(string $connectionKey = 'primary'): ?string
     {
+        if (isset($this->configuredConnections[$connectionKey])) {
+            return $this->configuredConnections[$connectionKey];
+        }
+
         $project = $this->projectService->getActiveProject();
         if (! $project || $project['type'] !== 'laravel') {
             return null;
@@ -36,7 +50,7 @@ class DatabaseController extends Controller
         $connName = "panel_project_{$connectionKey}";
         $this->dbService->configureConnection($connectionKey, $connEnv);
 
-        return $connName;
+        return $this->configuredConnections[$connectionKey] = $connName;
     }
 
     public function index()

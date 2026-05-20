@@ -30,7 +30,8 @@ class TerminalTickLoop extends Command
     /** @var string */
     protected $signature = 'hermes:terminal-tick
         {--max-iterations=0 : Stop after N iterations (0 = run forever; useful for tests)}
-        {--sleep=100000 : Microseconds to sleep between iterations (default 100ms)}';
+        {--sleep=100000 : Microseconds to sleep between iterations when sessions are active (default 100ms)}
+        {--idle-sleep=1000000 : Microseconds to sleep when no sessions are active (default 1s)}';
 
     /** @var string */
     protected $description = 'Long-running loop that streams terminal session output via Reverb broadcasts.';
@@ -62,18 +63,22 @@ class TerminalTickLoop extends Command
         $this->registerSignalHandlers();
         $this->bootSweep();
 
-        $sleep = (int) $this->option('sleep');
+        $activeSleep = max(1000, (int) $this->option('sleep'));
+        $idleSleep = max($activeSleep, (int) $this->option('idle-sleep'));
         $maxIterations = (int) $this->option('max-iterations');
         $iteration = 0;
 
         $this->logInfo('terminal-tick loop started', [
-            'sleep_us' => $sleep,
+            'sleep_us' => $activeSleep,
+            'idle_sleep_us' => $idleSleep,
             'max_iterations' => $maxIterations,
         ]);
 
         while (! $this->shuttingDown) {
+            $ticked = 0;
+
             try {
-                $this->tickAll();
+                $ticked = $this->tickAll();
             } catch (\Throwable $e) {
                 $this->logError('tick iteration failed', [
                     'message' => $e->getMessage(),
@@ -88,7 +93,10 @@ class TerminalTickLoop extends Command
                 break;
             }
 
-            usleep($sleep);
+            // Idle backoff: when nothing is running, sleep longer so the
+            // CPU isn't waking 10 times per second for nothing. Active
+            // sessions still get the snappy 100 ms cadence.
+            usleep($ticked > 0 ? $activeSleep : $idleSleep);
         }
 
         if ($this->shuttingDown) {
@@ -103,9 +111,14 @@ class TerminalTickLoop extends Command
     /**
      * Single iteration: tick every active session, broadcast produced
      * chunks, enforce idle / hard-cap watchdogs.
+     *
+     * Returns the number of sessions actually processed (non-stale,
+     * non-finalised) so the outer loop can pick a sleep cadence.
      */
-    protected function tickAll(): void
+    protected function tickAll(): int
     {
+        $ticked = 0;
+
         foreach ($this->sessions->listActiveSessionIds() as $sessionId) {
             $session = $this->sessions->getActive($sessionId);
 
@@ -122,6 +135,8 @@ class TerminalTickLoop extends Command
 
                 continue;
             }
+
+            $ticked++;
 
             $now = (int) now()->timestamp;
 
@@ -157,6 +172,8 @@ class TerminalTickLoop extends Command
                 $this->dispatch($session->project, $sessionId, $chunk);
             }
         }
+
+        return $ticked;
     }
 
     /**

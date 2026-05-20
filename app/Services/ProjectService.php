@@ -70,6 +70,11 @@ class ProjectService
 
     /**
      * Build project metadata array.
+     *
+     * Heavy fields (file_count, storage_used) are computed lazily — the
+     * caller must opt in via {@see withFileStats()} when it actually needs
+     * them. Recursive scans of full Laravel projects (vendor/, node_modules/)
+     * are *expensive*, so the dashboard / picker code paths skip them.
      */
     protected function buildProjectData(string $name, string $path, string $type): array
     {
@@ -90,9 +95,57 @@ class ProjectService
                 'storage' => is_dir($path.'/storage'),
                 'db_connected' => false, // Checked on-demand
             ],
-            'file_count' => $this->countFiles($path),
-            'storage_used' => $this->getStorageUsed($path),
             'last_modified' => filemtime($path),
+        ];
+    }
+
+    /**
+     * Augment a project entry with the heavy file_count + storage_used
+     * fields. Cached per-project for an hour because traversing a Laravel
+     * tree is dominated by `vendor/` and changes rarely outside `composer
+     * install`.
+     *
+     * Use this in the project detail view, never on the listing.
+     *
+     * @param  array<string, mixed>  $project
+     * @return array<string, mixed>
+     */
+    public function withFileStats(array $project): array
+    {
+        $path = (string) ($project['path'] ?? '');
+
+        if ($path === '' || ! is_dir($path)) {
+            return $project + ['file_count' => 0, 'storage_used' => '0 B'];
+        }
+
+        $cacheKey = 'panel.project_stats.'.md5($path);
+
+        $stats = Cache::remember(
+            $cacheKey,
+            (int) config('panel.project_stats_cache_ttl', 3600),
+            function () use ($path) {
+                $bytes = 0;
+                $count = 0;
+
+                $iterator = new \RecursiveIteratorIterator(
+                    new \RecursiveDirectoryIterator($path, \RecursiveDirectoryIterator::SKIP_DOTS),
+                    \RecursiveIteratorIterator::SELF_FIRST,
+                );
+
+                foreach ($iterator as $file) {
+                    if ($file->isFile()) {
+                        $count++;
+                        $bytes += $file->getSize();
+                    }
+                }
+
+                return ['count' => $count, 'bytes' => $bytes];
+            },
+        );
+
+        return $project + [
+            'file_count' => $stats['count'],
+            'storage_used' => $this->formatFileSize($stats['bytes']),
         ];
     }
 
