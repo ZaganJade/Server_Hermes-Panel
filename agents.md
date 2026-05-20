@@ -682,3 +682,142 @@ Discovery beyond Laravel (Node, Python, Go, mobile). Trigger `/brainstorm`.
 ### v3.4 — Server admin (aaPanel-lite): backlog
 
 Nginx vhost, Let's Encrypt, cron, backup. Trigger `/brainstorm`.
+
+---
+
+## 15. Security Operations Reference
+
+This section is the operator-facing recap of the security policy in
+this codebase. Every gate it documents is enforced by automated tests
+in `tests/`. If you change behaviour in `app/Http/Middleware/`,
+`app/Services/{Database,File,Tool,Terminal*}Service.php`, or
+`app/Http/Controllers/Panel/ToolController.php`, expect to update both
+code and tests here.
+
+### 15.1 Auth Layers (priority chain)
+
+When `PANEL_AUTH_ENABLED=true` (the safe default), every panel request
+must satisfy at least one of:
+
+1. **Session** — `panel_auth=true` set by a successful POST to
+   `/panel/login`.
+2. **Header password** — `X-Panel-Password` matching `PANEL_PASSWORD`.
+   Compared with `hash_equals` (timing-safe). No `?password=` query
+   string fallback.
+3. **WhatsApp gateway bypass** — `X-WA-Sender` matching
+   `PANEL_OWNER_NUMBERS`, **and** the request must come from an IP in
+   `PANEL_GATEWAY_IPS` (defaults to loopback only when empty), **and**
+   when `PANEL_GATEWAY_SECRET` is set the request must carry
+   `X-WA-Signature: hex(hmac_sha256(secret, sender))`.
+
+Failures redirect to `/panel/login` (web) or return 401 JSON
+(`/panel/api/*`).
+
+### 15.2 Trusted-Network Bypass
+
+`PANEL_AUTH_ENABLED=false` is only allowed together with
+`PANEL_DEV_BYPASS=true`. In production with the latter not set, the
+panel **refuses to boot** (RuntimeException at
+`AppServiceProvider::boot`). Use this combo only on a tunnel /
+VPN / private LAN.
+
+### 15.3 SQL Editor — `confirm_write` Flow
+
+`POST /panel/api/query` accepts:
+
+- `connection`     — connection key (`primary` or named)
+- `query`          — SQL
+- `confirm_write`  — boolean; required `true` for any non-read query
+
+Flow:
+
+- `SELECT|SHOW|DESCRIBE|EXPLAIN` execute directly.
+- `INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE|TRUNCATE|RENAME`
+  return `{type: 'confirm_required'}` unless `confirm_write=true`.
+- The blade view (`resources/views/panel/database.blade.php`) prompts
+  the operator with a `window.confirm()` dialog and re-submits with
+  the flag set when accepted.
+- Any other verb (e.g. `SET`, `USE`, `PRAGMA`) is rejected outright.
+
+### 15.4 Artisan Allow / Block List
+
+`POST /panel/api/tool/artisan` body:
+
+- `command`       — the artisan subcommand and its args (no shell
+                    metachars `; & | \` $ < > \n` permitted)
+- `project_path`  — defaults to active project
+
+`runArtisan` tokenises the command and passes an array `argv` to
+Symfony Process — no shell ever sees user input. The first token is
+checked against the allowlist (extend via
+`config('panel.allowed_artisan_commands')`) and the blocklist always
+wins. Default blocklist: `tinker`, `key:generate`, `env:encrypt|decrypt`,
+`down`, `up`, `db:wipe`, `db:seed`, `migrate:rollback|fresh|reset|refresh`,
+`serve`, `reverb:start|restart`.
+
+Operators who need a blocked command must SSH into the host.
+
+### 15.5 File Manager Guards
+
+- Every `name` segment supplied to create / rename / upload goes
+  through `FileService::assertSafeName()`: no separators, no `..`,
+  no leading dot, no shell-meta chars, length ≤ 255.
+- File names are checked against `FileService::isAllowedFilename()`
+  which blocks server-executable extensions (`php`, `phar`, `phtml`,
+  `php3-php8`, `pl`, `cgi`, `jsp`, `asp`, `aspx`, `sh`, `bash`,
+  `zsh`, `exe`, `bat`, `cmd`, `com`, `msi`, `dll`, `vbs`) and
+  Apache/IIS config filenames (`.htaccess`, `.htpasswd`, `web.config`,
+  `.user.ini`). Override via `config('panel.upload_blocked_extensions')`.
+- ZIP downloads cap at `panel.zip_max_bytes` (default 1 GB) and
+  `panel.zip_max_entries` (default 50 000). Aborted zips are
+  unlinked; the controller returns 500.
+- Project switching only via `POST /panel/api/files/switch-project`
+  (the legacy `?project=` query override was removed).
+
+### 15.6 Terminal Sandbox
+
+- Real-time path: `POST /panel/api/terminal/execute` (rate-limited
+  30/min per IP). Spawns a session, returns `session_id`, output
+  streams via the Reverb private channel `terminal.{project}` which
+  is gated in `routes/channels.php` against the panel session.
+- Synchronous fallback (used by trusted-network bypass mode):
+  `POST /panel/api/terminal/execute-sync`.
+- Both paths consult `TerminalCommandPolicy` before spawning. Blocks
+  interactive bins (`vim`, `top`, `mysql`, `sudo`, …), inline-eval
+  flags (`php -r`, `python -c`, `node -e`, …), recursive root
+  deletes, disk-wipe primitives, network listeners, and untrusted
+  filesystem redirects.
+- `cd` inside the synchronous path enforces the sandbox boundary
+  with both sides normalised to forward slashes (Windows-safe).
+  `cd` to absolute paths is rejected outright.
+
+### 15.7 Sessions
+
+- `SESSION_ENCRYPT=true`, `SESSION_HTTP_ONLY=true`, `SESSION_SAME_SITE=lax`
+  by default.
+- Set `SESSION_SECURE_COOKIE=true` whenever the panel is reachable
+  over HTTPS (public domain, Cloudflare Tunnel, reverse-proxy with
+  TLS).
+- The owner-access middleware refreshes the auth window on every
+  authenticated request; idle sessions expire after
+  `PANEL_SESSION_LIFETIME` minutes.
+
+### 15.8 Production Deploy Checklist
+
+Before exposing the panel to the internet:
+
+- [ ] `PANEL_AUTH_ENABLED=true`
+- [ ] `PANEL_DEV_BYPASS=false`
+- [ ] `PANEL_PASSWORD` rotated away from `changeme`
+- [ ] `SESSION_SECURE_COOKIE=true` for HTTPS
+- [ ] `REVERB_APP_KEY` and `REVERB_APP_SECRET` rotated away from
+      `changeme-*` defaults
+- [ ] WhatsApp policy decided:
+      - co-located gateway → leave `PANEL_GATEWAY_IPS` empty
+        (loopback only)
+      - external gateway → fill `PANEL_GATEWAY_IPS` and set
+        `PANEL_GATEWAY_SECRET`
+      - not used → drop `PANEL_OWNER_NUMBERS`
+- [ ] Reverse proxy (Caddy / Nginx / Cloudflare Tunnel) terminates
+      TLS in front of the docker container's loopback `:8080`
+- [ ] `php artisan config:clear` after `.env` edits

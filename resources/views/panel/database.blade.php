@@ -755,15 +755,34 @@ function dbApp(connections, queryHistory) {
             window.open(`{{ route('panel.api.export', ['table' => '__T__', 'format' => '__F__']) }}`.replace('__T__', encodeURIComponent(table)).replace('__F__', format), '_blank');
         },
 
-        async runQuery() {
+        async runQuery(confirmWrite = false) {
             this.running = true; this.queryResult = null;
             try {
                 const res = await fetch('{{ route('panel.api.query') }}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': this.csrf },
-                    body: JSON.stringify({ query: this.query, connection: this.activeConnection })
+                    body: JSON.stringify({
+                        query: this.query,
+                        connection: this.activeConnection,
+                        confirm_write: confirmWrite,
+                    }),
                 });
-                this.queryResult = await res.json();
+                const result = await res.json();
+
+                if (result.type === 'confirm_required') {
+                    this.running = false;
+                    const verb = (this.query.trim().split(/\s+/, 1)[0] || 'this').toUpperCase();
+                    const message = verb === 'DROP' || verb === 'TRUNCATE' || verb === 'DELETE'
+                        ? `${verb} is destructive and cannot be undone. Are you absolutely sure?`
+                        : `${verb} mutates data. Run anyway?`;
+                    if (window.confirm(message)) {
+                        return this.runQuery(true);
+                    }
+                    this.queryResult = { type: 'error', error: 'Query cancelled.' };
+                    return;
+                }
+
+                this.queryResult = result;
                 if (this.queryResult.type === 'error') this.showToast('Kueri galat', 'error');
             } catch(e) { this.showToast('Kueri gagal', 'error'); }
             this.running = false;
