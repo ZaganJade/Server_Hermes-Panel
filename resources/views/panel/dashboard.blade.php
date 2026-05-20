@@ -28,6 +28,9 @@
         </div>
     </div>
 
+    <!-- v3.2 Health strip: live host metrics with sparklines -->
+    @include('panel._dashboard_health_strip')
+
     <!-- Stat Grid: 4 columns separated by hairlines -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-px bg-[color:var(--rule)] border border-[color:var(--rule)] mb-16 animate-fade-up-1">
         @foreach ([

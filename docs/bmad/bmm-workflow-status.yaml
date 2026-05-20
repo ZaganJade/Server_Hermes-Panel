@@ -4,7 +4,7 @@
 project_name: "Hermes Panel"
 project_level: 3
 adoption_strategy: "forward-only"
-last_workflow: "dev-story"
+last_workflow: "sprint-close"
 last_workflow_date: "2026-05-20"
 initialized_at: "2026-05-19"
 initialized_by: "manual setup (Strategy A: forward-only)"
@@ -50,8 +50,8 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 2
   stories_created: 16
-  stories_completed: 15
-  active_sprint: "v3.2"
+  stories_completed: 16
+  active_sprint: null
   sprints:
     - id: "v3.1"
       title: "Real-time terminal (sub-project of v3 personal cockpit)"
@@ -80,13 +80,13 @@ phase_4_implementation:
         - { id: "v3.2-05", title: "MetricStorage SQLite schema + WAL + aggregate/prune",    status: "done",  deps: ["v3.2-02"] }
         - { id: "v3.2-06", title: "MonitoringTickLoop + supervisord + ThresholdEvaluator",   status: "done",  deps: ["v3.2-03", "v3.2-04", "v3.2-05"] }
         - { id: "v3.2-07", title: "HTTP API + channel auth + MonitoringController + OpenSpec", status: "done",  deps: ["v3.2-05", "v3.2-06"] }
-        - { id: "v3.2-08", title: "Frontend (uPlot + Dashboard strip + full tab) + E2E",     status: "ready", deps: ["v3.2-07"] }
+        - { id: "v3.2-08", title: "Frontend (uPlot + Dashboard strip + full tab) + E2E",     status: "done",  deps: ["v3.2-07"] }
   umbrella:
     v3:
       title: "Hermes Panel v3 — Personal server cockpit"
       sub_projects:
         - { id: "v3.1", title: "Real-time terminal",            status: "done"   }
-        - { id: "v3.2", title: "VPS monitoring",                 status: "active" }
+        - { id: "v3.2", title: "VPS monitoring",                 status: "done"   }
         - { id: "v3.3", title: "Multi-language project layer",   status: "backlog" }
         - { id: "v3.4", title: "Server admin (aaPanel-lite)",    status: "backlog" }
 
@@ -684,3 +684,31 @@ workflow_log:
       new_tests: 13
       new_assertions: 29
     note: "All endpoints behind OwnerAccess middleware; throttle:30,1 not added since these are read-only GET endpoints (only refreshServices is POST and acceptable to call freely). Channel callback mirrors v3.1 terminal pattern. OpenSpec capability spec covers lifecycle, thresholds, HTTP surface, channel auth, and storage layout. README gets full API table + threshold defaults documented inline."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-08"
+    title: "Frontend (uPlot + Dashboard strip + full tab) + E2E + sprint close"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "package.json + package-lock.json (npm install uplot)"
+      - "resources/js/monitoring/{index,charts,series,snapshot-store}.js (new)"
+      - "resources/js/app.js (Alpine factory registration)"
+      - "resources/views/panel/_dashboard_health_strip.blade.php (new partial)"
+      - "resources/views/panel/monitoring.blade.php (full tab UI)"
+      - "resources/views/panel/dashboard.blade.php (include health strip)"
+      - "resources/views/panel/layout.blade.php (sidebar ζ Monitoring tab)"
+      - "tests/e2e/monitoring.spec.ts (new Playwright spec)"
+      - "agents.md (section 15 v3.2 status: backlog → DONE)"
+    bundle_sizes:
+      app_js_raw_kb: 566.55
+      app_js_gzipped_kb: 162.50
+      target_gzipped_kb: 250
+      target_met: true
+    note: "MonitoringSnapshotStore singleton fans the WS stream out to multiple Alpine components. Bypass mode + missing Echo gracefully fall back to HTTP polling at 5s. uPlot themed via copper/rust/verdigris/paper palette tokens. Sidebar ζ Monitoring tab added to all 3 nav variants (desktop sidebar, mobile sidebar, mobile bottom nav). Health strip + monitoring tab share the same store instance for consistent reactivity. E2E spec covers strip rendering, navigation to tab, and window selector triggering /series fetch — skip-when-unreachable wrapper keeps CI green without a running container."
+  - workflow: "sprint-close"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    title: "v3.2 VPS monitoring sprint complete"
+    stories_completed: 8
+    note: "All 8 stories merged into feature/v3.2-vps-monitoring. Branch ready to merge into main. Pending decisions from earlier rescans: monitoring foundation done; v3.3 multi-language and v3.4 server admin remain in backlog."

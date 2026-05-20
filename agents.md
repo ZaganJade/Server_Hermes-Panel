@@ -671,9 +671,20 @@ sprint close.
   - `v3.1-07` Floating panel UI + File Manager terminal removal
   - `v3.1-08` Idle timeout 15min default + Playwright E2E + polish
 
-### v3.2 — VPS monitoring: backlog
+### v3.2 — VPS monitoring: **DONE**
 
-Not yet brainstormed. Trigger `/brainstorm` when starting.
+- Design: `docs/superpowers/specs/2026-05-20-vps-monitoring-design.md`
+- Capability spec: `openspec/changes/vps-monitoring-v32/specs/vps-monitoring/spec.md`
+- Stories: `docs/bmad/stories/v3.2-INDEX.md` (all 8 merged)
+- Status:
+  - `v3.2-01` Mount /proc, /sys + ProcResolver autodetect
+  - `v3.2-02` Reader interface + Cpu/Memory/Uptime readers
+  - `v3.2-03` DiskUsage/DiskIo/Network/Connection readers
+  - `v3.2-04` Process/Service/Port readers + whitelist
+  - `v3.2-05` MetricStorage SQLite + WAL + aggregate/prune
+  - `v3.2-06` MonitoringTickLoop + ThresholdEvaluator + supervisord
+  - `v3.2-07` HTTP API + channel auth + OpenSpec
+  - `v3.2-08` Frontend (uPlot + Dashboard strip + full tab) + E2E
 
 ### v3.3 — Multi-language project layer: backlog
 

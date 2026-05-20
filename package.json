@@ -22,6 +22,7 @@
         "alpinejs": "^3.15.12",
         "laravel-echo": "^2.3.4",
         "playwright": "^1.60.0",
-        "pusher-js": "^8.5.0"
+        "pusher-js": "^8.5.0",
+        "uplot": "^1.6.32"
     }
 }
