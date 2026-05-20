@@ -136,5 +136,32 @@ return [
             'php-fpm*', 'php*-fpm*',
             'docker', 'containerd', 'podman',
         ],
+
+        'thresholds' => [
+            [
+                'id' => 'cpu_load',
+                'metric' => 'cpu.loadavg.1m',
+                'warning_factor_per_core' => 1.5,
+                'critical_factor_per_core' => 2.0,
+                'sustained_seconds' => 60,
+            ],
+            [
+                'id' => 'mem_used',
+                'metric' => 'memory.used_kb',
+                'warning_pct' => 90,
+                'critical_pct' => 95,
+            ],
+            [
+                'id' => 'disk_used',
+                'metric' => 'disk.*.used_pct',
+                'warning' => 90,
+                'critical' => 95,
+            ],
+            [
+                'id' => 'service_down',
+                'metric' => 'services',
+                'critical_when' => 'expected_active_but_not',
+            ],
+        ],
     ],
 ];

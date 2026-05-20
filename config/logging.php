@@ -79,6 +79,13 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'monitoring-tick' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/monitoring-tick.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'replace_placeholders' => true,
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),

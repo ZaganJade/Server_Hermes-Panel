@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 2
   stories_created: 16
-  stories_completed: 13
+  stories_completed: 14
   active_sprint: "v3.2"
   sprints:
     - id: "v3.1"
@@ -78,7 +78,7 @@ phase_4_implementation:
         - { id: "v3.2-03", title: "DiskUsage/DiskIo/Network/Connection readers",            status: "done",  deps: ["v3.2-02"] }
         - { id: "v3.2-04", title: "Process/Service/Port readers + whitelist patterns",      status: "done",  deps: ["v3.2-02"] }
         - { id: "v3.2-05", title: "MetricStorage SQLite schema + WAL + aggregate/prune",    status: "done",  deps: ["v3.2-02"] }
-        - { id: "v3.2-06", title: "MonitoringTickLoop + supervisord + ThresholdEvaluator",   status: "ready", deps: ["v3.2-03", "v3.2-04", "v3.2-05"] }
+        - { id: "v3.2-06", title: "MonitoringTickLoop + supervisord + ThresholdEvaluator",   status: "done",  deps: ["v3.2-03", "v3.2-04", "v3.2-05"] }
         - { id: "v3.2-07", title: "HTTP API + channel auth + MonitoringController + OpenSpec", status: "ready", deps: ["v3.2-05", "v3.2-06"] }
         - { id: "v3.2-08", title: "Frontend (uPlot + Dashboard strip + full tab) + E2E",     status: "ready", deps: ["v3.2-07"] }
   umbrella:
@@ -639,3 +639,26 @@ workflow_log:
       new_tests: 8
       new_assertions: 42
     note: "Storage layer is broadcast-agnostic. Single-writer (monitoring-tick) + multi-reader (HTTP) on WAL mode. flattenForRaw skips first_sample rate fields so uninitialized counters never reach time-series. Discrete state (process/service/port lists) lives only in latest_snapshot JSON blob. Tests use Capsule-managed :memory: SQLite to avoid touching the real storage path. PRAGMA wal_checkpoint(TRUNCATE) runs after prune to reclaim WAL disk space — wrapped in try/catch so it's best-effort, never fatal."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-06"
+    title: "MonitoringTickLoop + supervisord + ThresholdEvaluator"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "app/Events/MonitoringAlert.php (new in-process event)"
+      - "app/Events/MonitoringSnapshot.php (new ShouldBroadcast event on private monitoring.host)"
+      - "app/Services/Monitoring/ThresholdEvaluator.php (new)"
+      - "app/Console/Commands/MonitoringTickLoop.php (new artisan hermes:monitoring-tick)"
+      - "config/panel.php (4 default threshold rules)"
+      - "config/logging.php (monitoring-tick log channel)"
+      - "docker/supervisord.conf (monitoring-tick program entry)"
+      - "tests/Unit/Services/Monitoring/ThresholdEvaluatorTest.php (new)"
+      - "tests/Feature/Console/MonitoringTickLoopTest.php (new)"
+    tests:
+      total: 156
+      passed: 156
+      assertions: 432
+      new_tests: 13
+      new_assertions: 27
+    note: "Tick-loop owns broadcasting + storage maintenance; service stays decoupled. ThresholdEvaluator handles hysteresis (level transitions only fire events), sustained-time rules (cpu_load needs 60s breach before firing), per-core CPU scaling, percentage-based rules (memory), disk glob rules (worst mount wins), and service_down rule (only fires for units previously seen active in last 5 min). 4 default thresholds in config: cpu_load, mem_used, disk_used, service_down."
