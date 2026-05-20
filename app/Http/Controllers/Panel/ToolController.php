@@ -17,6 +17,7 @@ class ToolController extends Controller
     protected function getProjectPath(): ?string
     {
         $project = $this->projectService->getActiveProject();
+
         return $project ? $project['path'] : null;
     }
 
@@ -33,34 +34,55 @@ class ToolController extends Controller
 
     public function runArtisan(Request $request)
     {
-        $command = $request->input('command', '');
+        $command = (string) $request->input('command', '');
         $projectPath = $request->input('project_path') ?: $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'error' => 'No active project.']);
         }
 
-        if (empty(trim($command))) {
+        $command = trim($command);
+
+        if ($command === '') {
             return response()->json(['success' => false, 'error' => 'Command is required.']);
         }
 
-        // SECURITY: Validate command against whitelist before execution
-        if (!$this->isArtisanCommandAllowed($command)) {
+        // Reject shell metacharacters outright. The artisan runner is not a
+        // shell — operators who need pipes, redirects, or chaining have the
+        // panel terminal for that.
+        if (preg_match('/[;&|`$<>\n\r]/', $command) || str_contains($command, '$(')) {
             return response()->json([
                 'success' => false,
-                'error' => 'Command not permitted in panel. Use SSH for unrestricted access.',
+                'error' => 'Shell metacharacters are not permitted in artisan commands.',
+            ]);
+        }
+
+        // Tokenise once, then audit the first token (the artisan subcommand).
+        $tokens = preg_split('/\s+/', $command, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $subcommand = $tokens[0] ?? '';
+
+        if (! $this->isArtisanCommandAllowed($subcommand)) {
+            return response()->json([
+                'success' => false,
+                'error' => sprintf(
+                    "'%s' is not permitted from the panel. Use SSH for unrestricted access.",
+                    $subcommand,
+                ),
             ]);
         }
 
         try {
+            // Array form so Symfony Process spawns directly without going
+            // through `/bin/sh -c …`. Each token becomes one argv entry —
+            // shell injection via concat is impossible.
             $result = Process::path($projectPath)
                 ->timeout(60)
-                ->run('php artisan ' . $command);
+                ->run(array_merge(['php', 'artisan'], $tokens));
 
             // Truncate output if too large (> 50KB)
             $output = $result->output();
             if (strlen($output) > 51200) {
-                $output = substr($output, 0, 51200) . "\n[output truncated]";
+                $output = substr($output, 0, 51200)."\n[output truncated]";
             }
 
             return response()->json([
@@ -75,44 +97,92 @@ class ToolController extends Controller
     }
 
     /**
-     * Whitelist of allowed artisan commands in panel terminal.
-     * Destructive, secrets-exposing, and interactive commands are BLOCKED.
+     * Allowlist of artisan subcommands that may be run from the panel UI.
+     *
+     * Anything destructive, secrets-rotating, or interactive lives outside
+     * this list — operators who need them must SSH in. Override or extend via
+     * `config('panel.allowed_artisan_commands', [])` without editing code.
+     *
+     * @return array<int, string>
      */
     protected function getAllowedArtisanCommands(): array
     {
-        // SECURITY REMOVED — all commands allowed, no whitelist needed
-        return [];
+        return array_values(array_unique(array_merge(
+            [
+                // Inspection — read-only, safe.
+                'about', 'list', 'help',
+                'route:list', 'route:cache', 'route:clear',
+                'view:cache', 'view:clear',
+                'config:cache', 'config:clear', 'config:show',
+                'event:cache', 'event:clear', 'event:list',
+                'optimize', 'optimize:clear',
+                'cache:clear', 'cache:forget', 'cache:prune-stale-tags',
+                'queue:listen', 'queue:work', 'queue:retry', 'queue:failed', 'queue:flush',
+                'schedule:list', 'schedule:run',
+                'storage:link',
+                // Migrations — forward only. Rollback / fresh / wipe stay
+                // off-list because they destroy data.
+                'migrate', 'migrate:status', 'migrate:install',
+                // Tests / pail — useful in dev panels.
+                'test', 'pail',
+            ],
+            array_filter((array) config('panel.allowed_artisan_commands', []), 'is_string'),
+        )));
     }
 
     /**
-     * Blocklist of dangerous commands — never allowed regardless of whitelist.
-     * SECURITY REMOVED — no commands blocked.
+     * Subcommands that must never run via the panel, even if added to the
+     * allowlist by accident.
+     *
+     * @return array<int, string>
      */
     protected function getBlockedArtisanCommands(): array
     {
-        return [];
+        return [
+            'tinker',                    // arbitrary code execution
+            'key:generate',              // rotates APP_KEY — invalidates sessions
+            'env:encrypt', 'env:decrypt',
+            'down', 'up',                // toggles maintenance mode without UI confirmation
+            'db:wipe', 'db:seed',
+            'migrate:rollback', 'migrate:fresh', 'migrate:reset', 'migrate:refresh',
+            'serve',                     // would bind another HTTP server
+            'reverb:start', 'reverb:restart',
+        ];
     }
 
     /**
-     * Check if an artisan command is allowed.
-     * SECURITY REMOVED — always returns true.
+     * Decide whether an artisan subcommand may run from the panel.
+     *
+     * Allow iff the subcommand is in the allowlist and not in the blocklist
+     * (the blocklist always wins, so accidental additions to the allowlist
+     * don't widen the surface).
      */
-    protected function isArtisanCommandAllowed(string $command): bool
+    protected function isArtisanCommandAllowed(string $subcommand): bool
     {
-        return true;
+        $subcommand = strtolower(trim($subcommand));
+
+        if ($subcommand === '') {
+            return false;
+        }
+
+        if (in_array($subcommand, $this->getBlockedArtisanCommands(), true)) {
+            return false;
+        }
+
+        return in_array($subcommand, $this->getAllowedArtisanCommands(), true);
     }
 
     public function getLogs(Request $request)
     {
         $projectPath = $request->input('project_path') ?: $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'error' => 'No active project']);
         }
 
-        $logFile = $projectPath . '/storage/logs/laravel.log';
+        $logFile = $projectPath.'/storage/logs/laravel.log';
 
-        if (!File::exists($logFile)) {
+        if (! File::exists($logFile)) {
             return response()->json(['success' => true, 'logs' => []]);
         }
 
@@ -130,7 +200,7 @@ class ToolController extends Controller
             $logLines = array_filter($logLines, fn ($line) => str_contains(strtoupper($line), $level));
         }
 
-        if (!empty($search)) {
+        if (! empty($search)) {
             $logLines = array_filter($logLines, fn ($line) => str_contains($line, $search));
         }
 
@@ -148,11 +218,11 @@ class ToolController extends Controller
     {
         $projectPath = $request->input('project_path') ?: $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'error' => 'No active project']);
         }
 
-        $logFile = $projectPath . '/storage/logs/laravel.log';
+        $logFile = $projectPath.'/storage/logs/laravel.log';
 
         if (File::exists($logFile)) {
             File::put($logFile, '');
@@ -165,16 +235,16 @@ class ToolController extends Controller
     {
         $projectPath = $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'error' => 'No active project']);
         }
 
-        $env = $this->projectService->readEnv($projectPath);
+        $env = $this->projectService->readEnvRaw($projectPath);
 
         // Configure DB
-        if (!empty($env['DB_DATABASE'])) {
+        if (! empty($env['DB_DATABASE'])) {
             config([
-                "database.connections.panel_queue" => [
+                'database.connections.panel_queue' => [
                     'driver' => $env['DB_CONNECTION'] ?? 'mysql',
                     'host' => $env['DB_HOST'] ?? '127.0.0.1',
                     'port' => $env['DB_PORT'] ?? 3306,
@@ -232,13 +302,13 @@ class ToolController extends Controller
     {
         $projectPath = $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'error' => 'No active project']);
         }
 
         try {
-            $env = $this->projectService->readEnv($projectPath);
-            config(["database.connections.panel_queue" => [
+            $env = $this->projectService->readEnvRaw($projectPath);
+            config(['database.connections.panel_queue' => [
                 'driver' => $env['DB_CONNECTION'] ?? 'mysql',
                 'host' => $env['DB_HOST'] ?? '127.0.0.1',
                 'port' => $env['DB_PORT'] ?? 3306,
@@ -249,7 +319,7 @@ class ToolController extends Controller
 
             $job = \DB::connection('panel_queue')->table('failed_jobs')->find($id);
 
-            if (!$job) {
+            if (! $job) {
                 return response()->json(['success' => false, 'error' => 'Job not found']);
             }
 
@@ -265,7 +335,7 @@ class ToolController extends Controller
     {
         $projectPath = $request->input('project_path') ?: $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'error' => 'No active project']);
         }
 
@@ -281,7 +351,7 @@ class ToolController extends Controller
     {
         $projectPath = $request->input('project_path') ?: $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'error' => 'No active project']);
         }
 
@@ -297,7 +367,7 @@ class ToolController extends Controller
     {
         $projectPath = $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'error' => 'No active project']);
         }
 
@@ -315,14 +385,14 @@ class ToolController extends Controller
     {
         $projectPath = $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'error' => 'No active project']);
         }
 
-        $env = $this->projectService->readEnv($projectPath);
+        $env = $this->projectService->readEnvRaw($projectPath);
 
-        if (!empty($env['DB_DATABASE'])) {
-            config(["database.connections.panel_queue" => [
+        if (! empty($env['DB_DATABASE'])) {
+            config(['database.connections.panel_queue' => [
                 'driver' => $env['DB_CONNECTION'] ?? 'mysql',
                 'host' => $env['DB_HOST'] ?? '127.0.0.1',
                 'port' => $env['DB_PORT'] ?? 3306,
@@ -333,6 +403,7 @@ class ToolController extends Controller
 
             try {
                 \DB::connection('panel_queue')->table('failed_jobs')->where('id', $id)->delete();
+
                 return response()->json(['success' => true]);
             } catch (\Throwable $e) {
                 return response()->json(['success' => false, 'error' => $e->getMessage()]);
@@ -347,12 +418,12 @@ class ToolController extends Controller
         $command = $request->input('command', 'install');
         $projectPath = $request->input('project_path') ?: $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'error' => 'No project selected']);
         }
 
         $allowed = ['install', 'update', 'dump-autoload'];
-        if (!in_array($command, $allowed)) {
+        if (! in_array($command, $allowed)) {
             return response()->json(['success' => false, 'error' => 'Invalid composer command']);
         }
 
@@ -376,12 +447,12 @@ class ToolController extends Controller
         $command = $request->input('command', 'install');
         $projectPath = $request->input('project_path') ?: $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'error' => 'No project selected']);
         }
 
         $allowed = ['install', 'run build', 'run dev'];
-        if (!in_array($command, $allowed)) {
+        if (! in_array($command, $allowed)) {
             return response()->json(['success' => false, 'error' => 'Invalid npm command']);
         }
 
@@ -407,13 +478,13 @@ class ToolController extends Controller
     {
         $projectPath = $request->input('project_path') ?: $this->getProjectPath();
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'seeders' => [], 'error' => 'No active project.']);
         }
 
-        $seedersDir = $projectPath . '/database/seeders';
+        $seedersDir = $projectPath.'/database/seeders';
 
-        if (!is_dir($seedersDir)) {
+        if (! is_dir($seedersDir)) {
             return response()->json(['success' => true, 'seeders' => [], 'seeder_path' => $seedersDir]);
         }
 
@@ -421,7 +492,7 @@ class ToolController extends Controller
         $seeders = [];
 
         foreach ($files as $file) {
-            if (is_file($seedersDir . '/' . $file) && preg_match('/^(?!.*Test\.php$).*Seeder\.php$/', $file)) {
+            if (is_file($seedersDir.'/'.$file) && preg_match('/^(?!.*Test\.php$).*Seeder\.php$/', $file)) {
                 $seeders[] = [
                     'file' => $file,
                     'class' => pathinfo($file, PATHINFO_FILENAME),
@@ -446,24 +517,24 @@ class ToolController extends Controller
         $projectPath = $request->input('project_path') ?: $this->getProjectPath();
         $seederClass = $request->input('seeder', '');
 
-        if (!$projectPath) {
+        if (! $projectPath) {
             return response()->json(['success' => false, 'output' => '', 'error' => 'No active project.']);
         }
 
         $command = 'db:seed';
-        if (!empty($seederClass) && $seederClass !== 'DatabaseSeeder') {
-            $command .= ' --class=' . $seederClass;
+        if (! empty($seederClass) && $seederClass !== 'DatabaseSeeder') {
+            $command .= ' --class='.$seederClass;
         }
         $command .= ' --force';
 
         try {
             $result = Process::path($projectPath)
                 ->timeout(60)
-                ->run('php artisan ' . $command);
+                ->run('php artisan '.$command);
 
             $output = $result->output();
             if (strlen($output) > 51200) {
-                $output = substr($output, 0, 51200) . "\n[output truncated]";
+                $output = substr($output, 0, 51200)."\n[output truncated]";
             }
 
             return response()->json([

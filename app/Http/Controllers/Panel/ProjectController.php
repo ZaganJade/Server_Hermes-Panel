@@ -18,6 +18,15 @@ class ProjectController extends Controller
         $allProjects = $this->projectService->getAllProjects();
         $hiddenProjects = $this->projectService->getHiddenProjects();
 
+        if ($activeProject) {
+            $activeProject = $this->projectService->withFileStats($activeProject);
+        }
+
+        $allProjects = array_map(
+            fn ($p) => $this->projectService->withFileStats($p),
+            $allProjects,
+        );
+
         return view('panel.projects', [
             'activeProject' => $activeProject,
             'allProjects' => $allProjects,
@@ -89,7 +98,7 @@ class ProjectController extends Controller
 
         $success = $this->projectService->deleteProject($name);
 
-        if (!$success) {
+        if (! $success) {
             return response()->json([
                 'success' => false,
                 'error' => 'Project not found or cannot be deleted.',

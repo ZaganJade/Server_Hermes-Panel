@@ -238,7 +238,10 @@ class TerminalSessionService
     {
         $session = $this->getActive($sessionId);
 
-        $chunks = $this->cache->get($this->bufferKey($sessionId), []);
+        $stored = $this->cache->get($this->bufferKey($sessionId), []);
+        $chunks = is_array($stored) && isset($stored['entries'])
+            ? (array) $stored['entries']
+            : (array) $stored;
         usort($chunks, fn ($a, $b) => ($a['ts'] ?? 0) <=> ($b['ts'] ?? 0));
 
         return [
@@ -278,22 +281,53 @@ class TerminalSessionService
 
     /**
      * Append a command to per-project history. FIFO at HISTORY_ITEM_CAP.
+     *
+     * Read-modify-write of a single cache key, so concurrent spawns racing
+     * for the same project would otherwise drop entries. We hold a short
+     * lock per project to make the sequence atomic; on lock-acquisition
+     * failure we fall through to the unlocked path — history is
+     * convenience-only, never authoritative.
      */
     public function pushHistory(string $project, string $command, ?int $exitCode = null): void
     {
-        $history = $this->history($project);
-
-        array_unshift($history, [
+        $entry = [
             'ts' => $this->now(),
             'command' => $command,
             'exit_code' => $exitCode,
-        ]);
+        ];
 
-        if (count($history) > self::HISTORY_ITEM_CAP) {
-            $history = array_slice($history, 0, self::HISTORY_ITEM_CAP);
+        $write = function () use ($project, $entry): void {
+            $history = $this->history($project);
+            array_unshift($history, $entry);
+
+            if (count($history) > self::HISTORY_ITEM_CAP) {
+                $history = array_slice($history, 0, self::HISTORY_ITEM_CAP);
+            }
+
+            $this->cache->put($this->historyKey($project), $history, self::HISTORY_TTL);
+        };
+
+        $cache = $this->cache;
+        $store = method_exists($cache, 'getStore') ? $cache->getStore() : null;
+
+        if ($store && method_exists($store, 'lock')) {
+            $lock = $store->lock("hermes:term:history-lock:{$project}", 5);
+            try {
+                if ($lock->get()) {
+                    try {
+                        $write();
+                    } finally {
+                        $lock->release();
+                    }
+
+                    return;
+                }
+            } catch (\Throwable) {
+                // Fall through to unlocked write.
+            }
         }
 
-        $this->cache->put($this->historyKey($project), $history, self::HISTORY_TTL);
+        $write();
     }
 
     /**
@@ -452,30 +486,53 @@ class TerminalSessionService
 
     /**
      * Append a chunk to the buffer with FIFO trim at BUFFER_BYTES_CAP.
+     *
+     * Maintains a separate `bytes` counter alongside the buffer entries so
+     * we don't have to walk every entry to compute the running total — a
+     * busy session emits hundreds of chunks/sec and the linear scan was
+     * O(N²) over the lifetime of the session.
      */
     protected function appendChunk(string $sessionId, array $chunk): void
     {
         $key = $this->bufferKey($sessionId);
-        $buffer = (array) $this->cache->get($key, []);
-        $buffer[] = $chunk;
+        $stored = $this->cache->get($key, ['bytes' => 0, 'entries' => []]);
 
-        $totalBytes = 0;
-        foreach ($buffer as $entry) {
-            $totalBytes += strlen((string) ($entry['data'] ?? ''));
+        // Backwards-compat: older buffers were a flat list of chunks.
+        if (! is_array($stored) || ! isset($stored['entries'])) {
+            $entries = is_array($stored) ? $stored : [];
+            $bytes = 0;
+            foreach ($entries as $entry) {
+                $bytes += strlen((string) ($entry['data'] ?? ''));
+            }
+            $stored = ['bytes' => $bytes, 'entries' => $entries];
         }
+
+        $entries = $stored['entries'];
+        $bytes = (int) $stored['bytes'];
+
+        $entries[] = $chunk;
+        $bytes += strlen((string) ($chunk['data'] ?? ''));
 
         // FIFO drop oldest while we're over budget.
-        while ($totalBytes > self::BUFFER_BYTES_CAP && count($buffer) > 1) {
-            $dropped = array_shift($buffer);
-            $totalBytes -= strlen((string) ($dropped['data'] ?? ''));
+        while ($bytes > self::BUFFER_BYTES_CAP && count($entries) > 1) {
+            $dropped = array_shift($entries);
+            $bytes -= strlen((string) ($dropped['data'] ?? ''));
         }
 
-        $this->cache->put($key, $buffer, self::BUFFER_TTL);
+        $this->cache->put(
+            $key,
+            ['bytes' => max(0, $bytes), 'entries' => $entries],
+            self::BUFFER_TTL,
+        );
     }
 
     protected function resetBuffer(string $sessionId): void
     {
-        $this->cache->put($this->bufferKey($sessionId), [], self::BUFFER_TTL);
+        $this->cache->put(
+            $this->bufferKey($sessionId),
+            ['bytes' => 0, 'entries' => []],
+            self::BUFFER_TTL,
+        );
     }
 
     protected function putActive(TerminalSession $session): void

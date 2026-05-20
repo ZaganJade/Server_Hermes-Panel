@@ -161,9 +161,23 @@ class TerminalService
 
         // Enforce sandbox boundary: resolved path must be within allowed project directory.
         // This prevents escape via symlinks inside the project.
+        // Cross-platform safe: realpath() can return either separator on
+        // Windows depending on PHP build, so normalise both sides to `/`.
         $realBase = realpath($basePath);
 
-        if (! $realBase || ! str_starts_with($resolved, $realBase.DIRECTORY_SEPARATOR)) {
+        if (! $realBase) {
+            return [
+                'output' => '',
+                'error' => "cd: access denied: path outside project boundary.\n",
+                'cwd' => $current,
+                'exit_code' => 1,
+            ];
+        }
+
+        $resolvedNorm = str_replace('\\', '/', $resolved);
+        $realBaseNorm = str_replace('\\', '/', $realBase);
+
+        if (! str_starts_with($resolvedNorm, rtrim($realBaseNorm, '/').'/')) {
             return [
                 'output' => '',
                 'error' => "cd: access denied: path outside project boundary.\n",

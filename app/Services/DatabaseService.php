@@ -2,54 +2,31 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Carbon\Carbon;
 
 class DatabaseService
 {
     /**
      * Configure a database connection for a project.
+     *
+     * The caller is expected to pass the unmasked env (see
+     * {@see ProjectService::readEnvRaw()}). We refuse to register a
+     * connection when the password still looks masked — silently
+     * connecting with `'********'` would just produce a confusing
+     * "access denied" error later.
      */
     public function configureConnection(string $name, array $env): void
     {
         $driver = $env['DB_CONNECTION'] ?? 'mysql';
-
         $password = $env['DB_PASSWORD'] ?? '';
 
-        // If password appears masked (********), read raw value from .env directly
-        // This happens because ProjectService::readEnv() masks sensitive credentials
-        if ($password === '********' || $password === '') {
-            $envPath = null;
-            // Try to find .env path from known project paths
-            foreach (['/home/ZaganJade1/hermes-panel/Project/desakta/.env'] as $path) {
-                if (file_exists($path)) {
-                    $envPath = $path;
-                    break;
-                }
-            }
-            // Fallback: try to get from panel config
-            if (!$envPath) {
-                $defaultProject = config('panel.default_project');
-                $projectsDir = base_path(config('panel.projects_dir', 'Project'));
-                $possiblePath = $projectsDir . '/' . $defaultProject . '/.env';
-                if (file_exists($possiblePath)) {
-                    $envPath = $possiblePath;
-                }
-            }
-            if ($envPath) {
-                $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-                foreach ($lines as $line) {
-                    $line = trim($line);
-                    if (str_starts_with($line, '#') || !str_contains($line, '=')) continue;
-                    [$key, $val] = explode('=', $line, 2);
-                    if (trim($key) === 'DB_PASSWORD') {
-                        $password = trim($val);
-                        break;
-                    }
-                }
-            }
+        if ($password === '********') {
+            throw new \RuntimeException(
+                'Refusing to configure DB connection: password is masked. '
+                .'Caller must pass raw env via ProjectService::readEnvRaw().'
+            );
         }
 
         Config::set("database.connections.panel_project_{$name}", [
@@ -73,9 +50,9 @@ class DatabaseService
         $connections = [];
 
         // Primary connection
-        if (!empty($env['DB_DATABASE'])) {
+        if (! empty($env['DB_DATABASE'])) {
             $connections['primary'] = [
-                'name' => 'Primary (' . ($env['DB_DATABASE'] ?? 'unknown') . ')',
+                'name' => 'Primary ('.($env['DB_DATABASE'] ?? 'unknown').')',
                 'driver' => $env['DB_CONNECTION'] ?? 'mysql',
                 'host' => $env['DB_HOST'] ?? '127.0.0.1',
                 'port' => $env['DB_PORT'] ?? 3306,
@@ -86,15 +63,15 @@ class DatabaseService
 
         // Detect additional connections (DB_CONNECTION_SECONDARY, DB_HOST_SECONDARY, etc.)
         foreach ($env as $key => $value) {
-            if (str_starts_with($key, 'DB_CONNECTION_') && !empty($value)) {
+            if (str_starts_with($key, 'DB_CONNECTION_') && ! empty($value)) {
                 $suffix = str_replace('DB_CONNECTION_', '', $key);
                 $dbHost = $env["DB_HOST_{$suffix}"] ?? $env['DB_HOST'] ?? '127.0.0.1';
                 $dbPort = $env["DB_PORT_{$suffix}"] ?? $env['DB_PORT'] ?? 3306;
                 $dbName = $env["DB_DATABASE_{$suffix}"] ?? '';
 
-                if (!empty($dbName)) {
+                if (! empty($dbName)) {
                     $connections[$suffix] = [
-                        'name' => ucfirst($suffix) . " ({$dbName})",
+                        'name' => ucfirst($suffix)." ({$dbName})",
                         'driver' => $value,
                         'host' => $dbHost,
                         'port' => $dbPort,
@@ -141,6 +118,7 @@ class DatabaseService
     {
         try {
             DB::connection($connectionName)->getPdo();
+
             return true;
         } catch (\Throwable $e) {
             return false;
@@ -198,10 +176,10 @@ class DatabaseService
      * Get table data with pagination and sorting.
      * Includes column metadata, primary key, and soft deletes detection.
      */
-    public function getTableData(string $connectionName, string $table, int $page = 1, int $perPage = 25, string $sortBy = null, string $sortDir = 'asc'): array
+    public function getTableData(string $connectionName, string $table, int $page = 1, int $perPage = 25, ?string $sortBy = null, string $sortDir = 'asc'): array
     {
         // Validate table name to prevent SQL injection
-        if (!$this->isValidSqlIdentifier($table)) {
+        if (! $this->isValidSqlIdentifier($table)) {
             return [
                 'data' => [],
                 'total' => 0,
@@ -214,14 +192,14 @@ class DatabaseService
 
         // Validate sort direction
         $sortDir = strtolower($sortDir);
-        if (!in_array($sortDir, ['asc', 'desc'], true)) {
+        if (! in_array($sortDir, ['asc', 'desc'], true)) {
             $sortDir = 'asc';
         }
 
         $conn = DB::connection($connectionName);
 
         // Validate sort column against identifier pattern
-        if ($sortBy && !$this->isValidSqlIdentifier($sortBy)) {
+        if ($sortBy && ! $this->isValidSqlIdentifier($sortBy)) {
             $sortBy = null;
         }
 
@@ -231,7 +209,7 @@ class DatabaseService
         $softDeletes = $this->detectSoftDeletes($connectionName, $table);
 
         // Filter out deleted_at from columns for UI (but keep softDeletes flag)
-        $displayColumns = array_filter($columns, fn($col) => $col['name'] !== 'deleted_at');
+        $displayColumns = array_filter($columns, fn ($col) => $col['name'] !== 'deleted_at');
         $displayColumns = array_values($displayColumns);
 
         $baseQuery = $conn->table($table);
@@ -261,7 +239,7 @@ class DatabaseService
      */
     public function getTrashData(string $connectionName, string $table, int $page = 1, int $perPage = 25): array
     {
-        if (!$this->isValidSqlIdentifier($table)) {
+        if (! $this->isValidSqlIdentifier($table)) {
             return [
                 'rows' => [],
                 'total' => 0,
@@ -282,7 +260,7 @@ class DatabaseService
 
         // Get column names from table metadata
         $columnsMeta = $this->getTableColumns($connectionName, $table);
-        $displayColumns = array_map(fn($col) => $col['name'], $columnsMeta);
+        $displayColumns = array_map(fn ($col) => $col['name'], $columnsMeta);
 
         return [
             'columns' => $displayColumns,
@@ -299,7 +277,7 @@ class DatabaseService
      */
     public function restoreRow(string $connectionName, string $table, int $id): bool
     {
-        if (!$this->isValidSqlIdentifier($table)) {
+        if (! $this->isValidSqlIdentifier($table)) {
             return false;
         }
 
@@ -323,7 +301,7 @@ class DatabaseService
      */
     public function forceDeleteRow(string $connectionName, string $table, $id): bool
     {
-        if (!$this->isValidSqlIdentifier($table)) {
+        if (! $this->isValidSqlIdentifier($table)) {
             return false;
         }
 
@@ -344,10 +322,17 @@ class DatabaseService
 
     /**
      * Run a raw SQL query.
-     * SECURITY: Restricted to read-only queries only. DDL and DML are blocked.
-     * ERROR HANDLING: Internal details are hidden — only user-friendly messages returned.
+     *
+     * Read queries (SELECT/SHOW/DESCRIBE/EXPLAIN) execute directly. Write
+     * queries (INSERT/UPDATE/DELETE/REPLACE) and DDL (ALTER/DROP/CREATE/
+     * TRUNCATE/RENAME) require an explicit `confirm_write` flag from the
+     * caller — the controller surfaces this as a confirmation dialog so
+     * destructive SQL can never run from a stray click or CSRF.
+     *
+     * Internal exception details are hidden from the response — only
+     * user-friendly messages are returned.
      */
-    public function runQuery(string $connectionName, string $sql): array
+    public function runQuery(string $connectionName, string $sql, bool $confirmWrite = false): array
     {
         // Normalize: strip line comments
         $normalizedSql = preg_replace('/--.*$/m', '', $sql);
@@ -359,27 +344,38 @@ class DatabaseService
         }
 
         // Determine query type from first word
-        // Determine query type from first word
         $firstWord = strtoupper(preg_match('/^\S+/', $normalizedSql, $m) ? $m[0] : '');
+        $readTypes = ['SELECT', 'SHOW', 'DESCRIBE', 'DESC', 'EXPLAIN'];
         $writeTypes = ['INSERT', 'UPDATE', 'DELETE', 'REPLACE'];
         $ddlTypes = ['ALTER', 'DROP', 'CREATE', 'TRUNCATE', 'RENAME'];
+        $allowedTypes = array_merge($readTypes, $writeTypes, $ddlTypes);
 
-        // SECURITY REMOVED — all query types allowed
-        $writeTypes = ['INSERT', 'UPDATE', 'DELETE', 'REPLACE'];
-        $ddlTypes = ['ALTER', 'DROP', 'CREATE', 'TRUNCATE', 'RENAME'];
-        $allowedTypes = ['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN', 'INSERT', 'UPDATE', 'DELETE', 'ALTER', 'DROP', 'CREATE', 'TRUNCATE', 'RENAME', 'REPLACE'];
-        if (!in_array($firstWord, $allowedTypes)) {
+        if (! in_array($firstWord, $allowedTypes, true)) {
             return [
                 'type' => 'error',
-                'error' => 'Only SELECT, SHOW, DESCRIBE, EXPLAIN, INSERT, UPDATE, DELETE, ALTER, DROP, CREATE, TRUNCATE, RENAME, REPLACE queries are permitted.',
+                'error' => 'Only SELECT, SHOW, DESCRIBE, EXPLAIN, INSERT, UPDATE, DELETE, REPLACE, ALTER, DROP, CREATE, TRUNCATE, RENAME queries are permitted.',
+            ];
+        }
+
+        $isMutating = in_array($firstWord, $writeTypes, true) || in_array($firstWord, $ddlTypes, true);
+
+        if ($isMutating && ! $confirmWrite) {
+            return [
+                'type' => 'confirm_required',
+                'error' => sprintf(
+                    '%s queries modify data. Re-submit with `confirm_write=true` to execute.',
+                    $firstWord,
+                ),
+                'kind' => in_array($firstWord, $ddlTypes, true) ? 'ddl' : 'modify',
             ];
         }
 
         try {
             $conn = DB::connection($connectionName);
 
-            if (in_array($firstWord, $writeTypes)) {
+            if (in_array($firstWord, $writeTypes, true)) {
                 $affected = $conn->affectingStatement($normalizedSql);
+
                 return [
                     'type' => 'modify',
                     'message' => "Query OK. {$affected} row(s) affected.",
@@ -387,15 +383,17 @@ class DatabaseService
                 ];
             }
 
-            if (in_array($firstWord, $ddlTypes)) {
+            if (in_array($firstWord, $ddlTypes, true)) {
                 $conn->statement($normalizedSql);
+
                 return [
                     'type' => 'ddl',
-                    'message' => "DDL query executed successfully.",
+                    'message' => 'DDL query executed successfully.',
                 ];
             }
 
             $results = $conn->select($normalizedSql);
+
             return [
                 'type' => 'select',
                 'data' => $results,
@@ -419,30 +417,59 @@ class DatabaseService
      */
     public function exportTable(string $connectionName, string $table, string $format): array
     {
-        $data = DB::connection($connectionName)->table($table)->get();
+        if (! $this->isValidSqlIdentifier($table)) {
+            return ['filename' => '', 'content' => '', 'format' => $format];
+        }
+
+        if (! in_array($format, ['json', 'csv'], true)) {
+            return ['filename' => '', 'content' => '', 'format' => $format];
+        }
+
+        // Stream rows in chunks instead of loading the whole table at once.
+        // Caps export at EXPORT_ROW_CAP rows so a runaway export can't OOM
+        // the panel — callers needing more should use mysqldump via SSH.
+        $cap = (int) config('panel.export_row_cap', 100_000);
+
         $timestamp = now()->format('Ymd_His');
         $filename = "{$table}_{$timestamp}.{$format}";
+
+        $rows = [];
+        $count = 0;
+
+        DB::connection($connectionName)
+            ->table($table)
+            ->orderBy(DB::connection($connectionName)->raw('1'))
+            ->chunk(1000, function ($chunk) use (&$rows, &$count, $cap) {
+                foreach ($chunk as $row) {
+                    if ($count >= $cap) {
+                        return false;
+                    }
+                    $rows[] = (array) $row;
+                    $count++;
+                }
+            });
 
         if ($format === 'json') {
             $content = json_encode([
                 'table' => $table,
                 'exported_at' => now()->toIso8601String(),
-                'row_count' => count($data),
-                'data' => $data,
+                'row_count' => $count,
+                'capped' => $count >= $cap,
+                'data' => $rows,
             ], JSON_PRETTY_PRINT);
         } else {
             // CSV
-            $rows = $data->toArray();
-            if (empty($rows)) {
+            if ($rows === []) {
                 $content = '';
             } else {
-                $headers = array_keys((array) $rows[0]);
+                $headers = array_keys($rows[0]);
                 $lines = [implode(',', $headers)];
                 foreach ($rows as $row) {
                     $values = array_map(function ($val) {
                         $val = str_replace('"', '""', (string) $val);
+
                         return "\"{$val}\"";
-                    }, (array) $row);
+                    }, $row);
                     $lines[] = implode(',', $values);
                 }
                 $content = implode("\n", $lines);
@@ -454,10 +481,17 @@ class DatabaseService
 
     protected function formatSize(int $bytes): string
     {
-        if ($bytes >= 1073741824) return number_format($bytes / 1073741824, 2) . ' GB';
-        if ($bytes >= 1048576) return number_format($bytes / 1048576, 2) . ' MB';
-        if ($bytes >= 1024) return number_format($bytes / 1024, 2) . ' KB';
-        return $bytes . ' B';
+        if ($bytes >= 1073741824) {
+            return number_format($bytes / 1073741824, 2).' GB';
+        }
+        if ($bytes >= 1048576) {
+            return number_format($bytes / 1048576, 2).' MB';
+        }
+        if ($bytes >= 1024) {
+            return number_format($bytes / 1024, 2).' KB';
+        }
+
+        return $bytes.' B';
     }
 
     /**
@@ -465,13 +499,16 @@ class DatabaseService
      */
     public function getTableColumns(string $connectionName, string $table): array
     {
-        if (!$this->isValidSqlIdentifier($table)) {
+        if (! $this->isValidSqlIdentifier($table)) {
             return [];
         }
 
         try {
             $columns = [];
-            $rows = DB::connection($connectionName)->select("DESCRIBE `{$table}`");
+            // Identifier already validated by isValidSqlIdentifier(); MySQL
+            // bind params can't substitute identifiers, so we interpolate
+            // and rely on the regex gate above.
+            $rows = DB::connection($connectionName)->select('DESCRIBE `'.$table.'`');
 
             foreach ($rows as $row) {
                 $type = 'varchar';
@@ -498,12 +535,13 @@ class DatabaseService
         } catch (\Throwable $e) {
             // Try PostgreSQL
             try {
-                $rows = DB::connection($connectionName)->select("
-                    SELECT column_name as field, data_type as type, is_nullable as null, column_default as default
+                $rows = DB::connection($connectionName)->select(
+                    'SELECT column_name as field, data_type as type, is_nullable as nullable, column_default as default_value
                     FROM information_schema.columns
-                    WHERE table_name = '{$table}'
-                    ORDER BY ordinal_position
-                ");
+                    WHERE table_name = ?
+                    ORDER BY ordinal_position',
+                    [$table],
+                );
 
                 $columns = [];
                 foreach ($rows as $row) {
@@ -511,12 +549,13 @@ class DatabaseService
                         'name' => $row->field,
                         'type' => strtolower($row->type),
                         'type_args' => null,
-                        'nullable' => $row->null === 'YES',
+                        'nullable' => $row->nullable === 'YES',
                         'key' => '',
-                        'default' => $row->default,
+                        'default' => $row->default_value,
                         'extra' => '',
                     ];
                 }
+
                 return $columns;
             } catch (\Throwable $e2) {
                 return [];
@@ -529,7 +568,7 @@ class DatabaseService
      */
     public function detectSoftDeletes(string $connectionName, string $table): bool
     {
-        if (!$this->isValidSqlIdentifier($table)) {
+        if (! $this->isValidSqlIdentifier($table)) {
             return false;
         }
 
@@ -545,13 +584,15 @@ class DatabaseService
      */
     public function getPrimaryKey(string $connectionName, string $table): string
     {
-        if (!$this->isValidSqlIdentifier($table)) {
+        if (! $this->isValidSqlIdentifier($table)) {
             return 'id';
         }
 
         try {
-            $result = DB::connection($connectionName)->select("SHOW KEYS FROM `{$table}` WHERE Key_name = 'PRIMARY'");
-            if (!empty($result)) {
+            // Identifier already validated; MySQL can't bind identifiers.
+            $result = DB::connection($connectionName)
+                ->select('SHOW KEYS FROM `'.$table."` WHERE Key_name = 'PRIMARY'");
+            if (! empty($result)) {
                 return $result[0]->Column_name;
             }
         } catch (\Throwable $e) {

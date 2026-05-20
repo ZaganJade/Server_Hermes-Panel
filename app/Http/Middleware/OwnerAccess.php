@@ -79,11 +79,34 @@ class OwnerAccess
         return hash_equals($expected, $provided);
     }
 
+    /**
+     * WhatsApp gateway bypass.
+     *
+     * `X-WA-Sender` is a user-controllable header in any HTTP client, so on
+     * a public domain we MUST NOT trust it on its own — anyone could spoof
+     * it. Two layers gate it:
+     *
+     *   1. The remote IP must appear in `panel.gateway_ips` (the
+     *      WhatsApp gateway co-located on the server, or a known
+     *      forwarder). When the list is empty, we only trust loopback.
+     *   2. If `panel.gateway_secret` is configured, the gateway must sign
+     *      the sender header using `X-WA-Signature: hex(hmac_sha256(secret,
+     *      sender))` — protects against IP spoofing in misconfigured
+     *      reverse-proxy setups.
+     */
     protected function hasValidWhatsAppSender(Request $request): bool
     {
         $sender = $this->getSenderNumber($request);
 
         if ($sender === '') {
+            return false;
+        }
+
+        if (! $this->whatsAppGatewayIpAllowed($request)) {
+            return false;
+        }
+
+        if (! $this->whatsAppGatewaySignatureValid($request, $sender)) {
             return false;
         }
 
@@ -93,6 +116,49 @@ class OwnerAccess
         );
 
         return in_array($this->normalizeNumber($sender), $allowed, true);
+    }
+
+    /**
+     * Whether the request originates from a recognised WhatsApp gateway.
+     * Defaults to loopback only when no allowlist is configured.
+     */
+    protected function whatsAppGatewayIpAllowed(Request $request): bool
+    {
+        $configured = array_values(array_filter(
+            (array) config('panel.gateway_ips', []),
+            fn ($ip) => is_string($ip) && $ip !== '',
+        ));
+
+        $allowed = $configured === [] ? ['127.0.0.1', '::1'] : $configured;
+
+        $remote = (string) $request->ip();
+
+        return in_array($remote, $allowed, true);
+    }
+
+    /**
+     * If a gateway secret is configured, demand a valid HMAC over the
+     * sender header. When no secret is configured we keep the previous
+     * behaviour (skip signature check) so existing trusted-network setups
+     * keep working.
+     */
+    protected function whatsAppGatewaySignatureValid(Request $request, string $sender): bool
+    {
+        $secret = (string) config('panel.gateway_secret', '');
+
+        if ($secret === '') {
+            return true;
+        }
+
+        $signature = (string) $request->header('X-WA-Signature', '');
+
+        if ($signature === '') {
+            return false;
+        }
+
+        $expected = hash_hmac('sha256', $sender, $secret);
+
+        return hash_equals($expected, $signature);
     }
 
     protected function denyResponse(Request $request)
