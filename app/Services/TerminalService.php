@@ -175,9 +175,12 @@ class TerminalService
         }
 
         $resolvedNorm = str_replace('\\', '/', $resolved);
-        $realBaseNorm = str_replace('\\', '/', $realBase);
+        $realBaseNorm = rtrim(str_replace('\\', '/', $realBase), '/');
 
-        if (! str_starts_with($resolvedNorm, rtrim($realBaseNorm, '/').'/')) {
+        $insideSandbox = $resolvedNorm === $realBaseNorm
+            || str_starts_with($resolvedNorm, $realBaseNorm.'/');
+
+        if (! $insideSandbox) {
             return [
                 'output' => '',
                 'error' => "cd: access denied: path outside project boundary.\n",
