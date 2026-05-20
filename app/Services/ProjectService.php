@@ -2,12 +2,13 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\File;
 
 class ProjectService
 {
     protected string $projectsDir;
+
     protected string $projectsJsonPath;
 
     public function __construct()
@@ -27,7 +28,7 @@ class ProjectService
 
         $projects = array_merge($discovered, $manual);
 
-        if (!$includeHidden) {
+        if (! $includeHidden) {
             $projects = array_diff_key($projects, $hidden);
         }
 
@@ -42,7 +43,7 @@ class ProjectService
         return Cache::remember('panel.discovered_projects', config('panel.discovery_cache_ttl', 300), function () {
             $projects = [];
 
-            if (!is_dir($this->projectsDir)) {
+            if (! is_dir($this->projectsDir)) {
                 return $projects;
             }
 
@@ -53,13 +54,13 @@ class ProjectService
                     continue;
                 }
 
-                $path = $this->projectsDir . '/' . $entry;
+                $path = $this->projectsDir.'/'.$entry;
 
-                if (!is_dir($path)) {
+                if (! is_dir($path)) {
                     continue;
                 }
 
-                $isLaravel = file_exists($path . '/artisan');
+                $isLaravel = file_exists($path.'/artisan');
                 $projects[$entry] = $this->buildProjectData($entry, $path, $isLaravel ? 'laravel' : 'generic');
             }
 
@@ -84,9 +85,9 @@ class ProjectService
             'laravel_version' => $this->extractLaravelVersion($composerJson),
             'php_version' => $composerJson['require']['php'] ?? 'unknown',
             'status' => [
-                'env' => file_exists($path . '/.env'),
-                'vendor' => is_dir($path . '/vendor'),
-                'storage' => is_dir($path . '/storage'),
+                'env' => file_exists($path.'/.env'),
+                'vendor' => is_dir($path.'/vendor'),
+                'storage' => is_dir($path.'/storage'),
                 'db_connected' => false, // Checked on-demand
             ],
             'file_count' => $this->countFiles($path),
@@ -104,11 +105,11 @@ class ProjectService
         $projects = [];
 
         foreach ($data['manual'] ?? [] as $name => $path) {
-            if (!is_dir($path)) {
+            if (! is_dir($path)) {
                 continue;
             }
 
-            $isLaravel = file_exists($path . '/artisan');
+            $isLaravel = file_exists($path.'/artisan');
             $projects[$name] = $this->buildProjectData($name, $path, $isLaravel ? 'laravel' : 'generic');
             $projects[$name]['manual'] = true;
         }
@@ -122,6 +123,7 @@ class ProjectService
     public function getHiddenProjects(): array
     {
         $data = $this->readProjectsJson();
+
         return $data['hidden'] ?? [];
     }
 
@@ -134,7 +136,7 @@ class ProjectService
         $activeName = session('active_project');
 
         // Auto-set default project from env if no active project
-        if (!$activeName) {
+        if (! $activeName) {
             $default = config('panel.default_project');
             if ($default) {
                 $projects = $this->getAllProjects();
@@ -145,14 +147,14 @@ class ProjectService
             }
         }
 
-        if (!$activeName) {
+        if (! $activeName) {
             return null;
         }
 
         $projects = $this->getAllProjects();
         $project = $projects[$activeName] ?? null;
 
-        if (!$project) {
+        if (! $project) {
             return null;
         }
 
@@ -177,13 +179,14 @@ class ProjectService
     {
         if ($name) {
             $project = $this->getProject($name);
-            if (!$project) {
+            if (! $project) {
                 return false;
             }
         }
 
         session(['active_project' => $name]);
         Cache::forget('panel.discovered_projects');
+
         return true;
     }
 
@@ -192,7 +195,7 @@ class ProjectService
      */
     public function addManualProject(string $name, string $path): bool
     {
-        if (!is_dir($path)) {
+        if (! is_dir($path)) {
             return false;
         }
 
@@ -202,6 +205,7 @@ class ProjectService
         $this->writeProjectsJson($data);
 
         Cache::forget('panel.discovered_projects');
+
         return true;
     }
 
@@ -216,6 +220,7 @@ class ProjectService
         $this->writeProjectsJson($data);
 
         Cache::forget('panel.discovered_projects');
+
         return true;
     }
 
@@ -229,6 +234,7 @@ class ProjectService
         $this->writeProjectsJson($data);
 
         Cache::forget('panel.discovered_projects');
+
         return true;
     }
 
@@ -240,13 +246,13 @@ class ProjectService
         $projects = $this->getAllProjects(true);
         $project = $projects[$name] ?? null;
 
-        if (!$project) {
+        if (! $project) {
             return false;
         }
 
         $path = $project['path'];
 
-        if (!str_starts_with(realpath($path), realpath($this->projectsDir))) {
+        if (! str_starts_with(realpath($path), realpath($this->projectsDir))) {
             return false;
         }
 
@@ -297,20 +303,44 @@ class ProjectService
     }
 
     /**
-     * Read project's .env file and mask sensitive credentials.
+     * Read project's .env file. Sensitive values are masked for safe display
+     * (admin views, JSON responses). Use {@see readEnvRaw()} when you need
+     * the real value — e.g. configuring a database connection.
+     *
+     * @return array<string, string>
      */
     public function readEnv(string $projectPath): array
     {
-        $envFile = $projectPath . '/.env';
+        return $this->parseEnv($projectPath, mask: true);
+    }
+
+    /**
+     * Read project's .env file with no masking applied. The caller is
+     * responsible for never returning these values back over HTTP.
+     *
+     * @return array<string, string>
+     */
+    public function readEnvRaw(string $projectPath): array
+    {
+        return $this->parseEnv($projectPath, mask: false);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function parseEnv(string $projectPath, bool $mask): array
+    {
+        $envFile = $projectPath.'/.env';
         $env = [];
 
-        if (!File::exists($envFile)) {
+        if (! File::exists($envFile)) {
             return $env;
         }
 
         $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
 
-        // Keys that contain sensitive credentials and should be masked
+        // Keys that contain sensitive credentials and should be masked when
+        // {@see readEnv()} is used.
         $sensitiveKeys = [
             'DB_PASSWORD',
             'DB_PASSWORD_SECONDARY',
@@ -348,7 +378,7 @@ class ProjectService
         foreach ($lines as $line) {
             $line = trim($line);
 
-            if (str_starts_with($line, '#') || !str_contains($line, '=')) {
+            if (str_starts_with($line, '#') || ! str_contains($line, '=')) {
                 continue;
             }
 
@@ -356,25 +386,28 @@ class ProjectService
             $key = trim($key);
             $value = trim($value);
 
-            // Check if this key should be masked
-            $shouldMask = false;
-            foreach ($sensitiveKeys as $sensitiveKey) {
-                if (str_contains($sensitiveKey, '*')) {
-                    // Handle wildcard patterns like DB_PASSWORD_*
-                    $pattern = str_replace('*', '', $sensitiveKey);
-                    if (str_starts_with($key, $pattern)) {
-                        $shouldMask = true;
-                        break;
-                    }
-                } elseif ($key === $sensitiveKey) {
-                    $shouldMask = true;
-                    break;
+            // Strip surrounding quotes (PHP's parse_ini-style handling)
+            if (strlen($value) >= 2) {
+                $first = $value[0];
+                $last = $value[strlen($value) - 1];
+                if (($first === '"' && $last === '"') || ($first === "'" && $last === "'")) {
+                    $value = substr($value, 1, -1);
                 }
             }
 
-            // Mask the value if sensitive
-            if ($shouldMask && !empty($value)) {
-                $value = '********';
+            if ($mask && $value !== '') {
+                foreach ($sensitiveKeys as $sensitiveKey) {
+                    if (str_contains($sensitiveKey, '*')) {
+                        $pattern = str_replace('*', '', $sensitiveKey);
+                        if (str_starts_with($key, $pattern)) {
+                            $value = '********';
+                            break;
+                        }
+                    } elseif ($key === $sensitiveKey) {
+                        $value = '********';
+                        break;
+                    }
+                }
             }
 
             $env[$key] = $value;
@@ -388,9 +421,9 @@ class ProjectService
      */
     protected function readComposerJson(string $projectPath): array
     {
-        $file = $projectPath . '/composer.json';
+        $file = $projectPath.'/composer.json';
 
-        if (!File::exists($file)) {
+        if (! File::exists($file)) {
             return [];
         }
 
@@ -406,7 +439,7 @@ class ProjectService
     {
         $laravel = $composerJson['require']['laravel/framework'] ?? null;
 
-        if (!$laravel) {
+        if (! $laravel) {
             return 'unknown';
         }
 
@@ -419,7 +452,7 @@ class ProjectService
      */
     protected function countFiles(string $path): int
     {
-        if (!is_dir($path)) {
+        if (! is_dir($path)) {
             return 0;
         }
 
@@ -443,7 +476,7 @@ class ProjectService
      */
     protected function getStorageUsed(string $path): string
     {
-        if (!is_dir($path)) {
+        if (! is_dir($path)) {
             return '0 B';
         }
 
@@ -468,16 +501,16 @@ class ProjectService
     public function formatFileSize(int $bytes): string
     {
         if ($bytes >= 1073741824) {
-            return number_format($bytes / 1073741824, 2) . ' GB';
+            return number_format($bytes / 1073741824, 2).' GB';
         }
         if ($bytes >= 1048576) {
-            return number_format($bytes / 1048576, 2) . ' MB';
+            return number_format($bytes / 1048576, 2).' MB';
         }
         if ($bytes >= 1024) {
-            return number_format($bytes / 1024, 2) . ' KB';
+            return number_format($bytes / 1024, 2).' KB';
         }
 
-        return $bytes . ' B';
+        return $bytes.' B';
     }
 
     /**
@@ -485,7 +518,7 @@ class ProjectService
      */
     protected function readProjectsJson(): array
     {
-        if (!File::exists($this->projectsJsonPath)) {
+        if (! File::exists($this->projectsJsonPath)) {
             return [];
         }
 

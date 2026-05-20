@@ -2,21 +2,22 @@
 
 namespace App\Jobs;
 
+use App\Services\DatabaseService;
+use App\Services\ProjectService;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
-use App\Services\ProjectService;
-use App\Services\DatabaseService;
 
 class CleanupDatabaseTrash implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $timeout = 300;
+
     public int $tries = 1;
 
     public function handle(): void
@@ -27,10 +28,14 @@ class CleanupDatabaseTrash implements ShouldQueue
         $projects = $projectService->getAllProjects();
 
         foreach ($projects as $projectName => $project) {
-            if ($project['type'] !== 'laravel') continue;
+            if ($project['type'] !== 'laravel') {
+                continue;
+            }
 
-            $env = $projectService->readEnv($project['path']);
-            if (empty($env['DB_DATABASE'])) continue;
+            $env = $projectService->readEnvRaw($project['path']);
+            if (empty($env['DB_DATABASE'])) {
+                continue;
+            }
 
             $connName = "panel_project_{$projectName}";
             $dbService->configureConnection($projectName, $env);
@@ -40,7 +45,9 @@ class CleanupDatabaseTrash implements ShouldQueue
             foreach ($tables as $table) {
                 $tableName = $table['name'];
 
-                if (!$dbService->detectSoftDeletes($connName, $tableName)) continue;
+                if (! $dbService->detectSoftDeletes($connName, $tableName)) {
+                    continue;
+                }
 
                 try {
                     $deleted = DB::connection($connName)
@@ -63,6 +70,6 @@ class CleanupDatabaseTrash implements ShouldQueue
 
     public function failed(\Throwable $exception): void
     {
-        \Log::error('CleanupDatabaseTrash job failed: ' . $exception->getMessage());
+        \Log::error('CleanupDatabaseTrash job failed: '.$exception->getMessage());
     }
 }

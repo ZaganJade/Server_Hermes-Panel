@@ -18,11 +18,13 @@ class DatabaseController extends Controller
     protected function configureActiveProjectDb(string $connectionKey = 'primary'): ?string
     {
         $project = $this->projectService->getActiveProject();
-        if (!$project || $project['type'] !== 'laravel') {
+        if (! $project || $project['type'] !== 'laravel') {
             return null;
         }
 
-        $env = $this->projectService->readEnv($project['path']);
+        // Raw env — we need the real DB password to configure the
+        // connection. Display surfaces use readEnv() which masks.
+        $env = $this->projectService->readEnvRaw($project['path']);
         if (empty($env['DB_DATABASE'])) {
             return null;
         }
@@ -58,7 +60,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['error' => 'No database configured', 'tables' => []]);
         }
 
@@ -70,7 +72,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['error' => 'No database configured']);
         }
 
@@ -89,7 +91,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['error' => 'No database configured', 'columns' => []]);
         }
 
@@ -103,7 +105,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['success' => false, 'error' => 'No database configured']);
         }
 
@@ -111,12 +113,12 @@ class DatabaseController extends Controller
             $column = $request->input('column');
             $value = $request->input('value');
 
-            if (!$column) {
+            if (! $column) {
                 return response()->json(['success' => false, 'error' => 'Column is required']);
             }
 
             // Validate column name
-            if (!$this->dbService->isValidSqlIdentifier($column)) {
+            if (! $this->dbService->isValidSqlIdentifier($column)) {
                 return response()->json(['success' => false, 'error' => 'Invalid column name']);
             }
 
@@ -137,7 +139,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['success' => false, 'error' => 'No database configured']);
         }
 
@@ -149,7 +151,7 @@ class DatabaseController extends Controller
 
             // Validate all column names
             foreach (array_keys($data) as $column) {
-                if (!$this->dbService->isValidSqlIdentifier($column)) {
+                if (! $this->dbService->isValidSqlIdentifier($column)) {
                     return response()->json(['success' => false, 'error' => "Invalid column name: {$column}"]);
                 }
             }
@@ -167,7 +169,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['error' => 'No database configured', 'rows' => []]);
         }
 
@@ -184,7 +186,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['success' => false, 'error' => 'No database configured']);
         }
 
@@ -198,13 +200,13 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['success' => false, 'error' => 'No database configured']);
         }
 
         $success = $this->dbService->forceDeleteRow($connName, $table, $id);
 
-            return response()->json(['success' => $success]);
+        return response()->json(['success' => $success]);
     }
 
     public function emptyTrash(Request $request, string $table)
@@ -212,7 +214,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['success' => false, 'error' => 'No database configured']);
         }
 
@@ -233,7 +235,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['success' => false, 'error' => 'No database configured']);
         }
 
@@ -260,7 +262,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['success' => false, 'error' => 'No database configured']);
         }
 
@@ -291,7 +293,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['type' => 'error', 'error' => 'No database configured']);
         }
 
@@ -301,7 +303,11 @@ class DatabaseController extends Controller
             return response()->json(['type' => 'error', 'error' => 'Query is empty']);
         }
 
-        $result = $this->dbService->runQuery($connName, $sql);
+        $result = $this->dbService->runQuery(
+            $connName,
+            $sql,
+            $request->boolean('confirm_write'),
+        );
 
         // Store in query history
         $history = session('query_history', []);
@@ -316,7 +322,7 @@ class DatabaseController extends Controller
         $connectionKey = $request->get('connection', 'primary');
         $connName = $this->configureActiveProjectDb($connectionKey);
 
-        if (!$connName) {
+        if (! $connName) {
             return response()->json(['error' => 'No database configured']);
         }
 

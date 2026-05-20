@@ -35,7 +35,7 @@ class FileService
         $fullPath = $this->resolvePath($relativePath);
         $basePath = $this->getBasePath();
 
-        if (!$fullPath || !is_dir($fullPath)) {
+        if (! $fullPath || ! is_dir($fullPath)) {
             return ['directories' => [], 'files' => [], 'currentPath' => '/', 'breadcrumbs' => [['name' => 'root', 'path' => '/']]];
         }
 
@@ -48,8 +48,8 @@ class FileService
                 continue;
             }
 
-            $entryPath = $fullPath . '/' . $entry;
-            $relativeEntryPath = rtrim($relativePath, '/') . '/' . $entry;
+            $entryPath = $fullPath.'/'.$entry;
+            $relativeEntryPath = rtrim($relativePath, '/').'/'.$entry;
 
             if (is_dir($entryPath)) {
                 $directories[] = [
@@ -99,7 +99,7 @@ class FileService
     {
         $fullPath = $this->resolvePath($relativePath);
 
-        if (!$fullPath || !File::exists($fullPath) || is_dir($fullPath)) {
+        if (! $fullPath || ! File::exists($fullPath) || is_dir($fullPath)) {
             return ['error' => 'File not found'];
         }
 
@@ -122,12 +122,13 @@ class FileService
     {
         $fullPath = $this->resolvePath($relativePath);
 
-        if (!$fullPath) {
+        if (! $fullPath) {
             return ['success' => false, 'error' => 'Access denied'];
         }
 
         try {
             File::put($fullPath, $content);
+
             return ['success' => true];
         } catch (\Throwable $e) {
             return ['success' => false, 'error' => $e->getMessage()];
@@ -136,16 +137,34 @@ class FileService
 
     /**
      * Create file or directory.
+     *
+     * `$relativePath` is the parent directory and must already exist inside
+     * the sandbox. `$name` is validated against {@see assertSafeName()} —
+     * no slashes, no `..`, no leading dot, no shell-meta chars.
      */
     public function create(string $relativePath, string $name, string $type): array
     {
         $fullPath = $this->resolvePath($relativePath);
 
-        if (!$fullPath) {
+        if (! $fullPath || ! is_dir($fullPath)) {
             return ['success' => false, 'error' => 'Access denied'];
         }
 
-        $targetPath = rtrim($fullPath, '/') . '/' . $name;
+        if ($error = $this->assertSafeName($name)) {
+            return ['success' => false, 'error' => $error];
+        }
+
+        if ($type === 'file' && ! $this->isAllowedFilename($name)) {
+            return ['success' => false, 'error' => 'This file extension is not allowed.'];
+        }
+
+        $targetPath = rtrim($fullPath, '/').'/'.$name;
+
+        // Defence-in-depth: even though `$name` is name-only, re-check that
+        // the resolved parent stays inside the sandbox.
+        if (! $this->isUnderBasePath(dirname($targetPath))) {
+            return ['success' => false, 'error' => 'Access denied'];
+        }
 
         try {
             if ($type === 'directory') {
@@ -167,16 +186,29 @@ class FileService
     {
         $fullPath = $this->resolvePath($relativePath);
 
-        if (!$fullPath) {
+        if (! $fullPath) {
             return ['success' => false, 'error' => 'Access denied'];
         }
 
+        if ($error = $this->assertSafeName($newName)) {
+            return ['success' => false, 'error' => $error];
+        }
+
+        if (! is_dir($fullPath) && ! $this->isAllowedFilename($newName)) {
+            return ['success' => false, 'error' => 'This file extension is not allowed.'];
+        }
+
         $parentPath = dirname($fullPath);
-        $newPath = $parentPath . '/' . $newName;
+        $newPath = $parentPath.'/'.$newName;
+
+        if (! $this->isUnderBasePath($parentPath)) {
+            return ['success' => false, 'error' => 'Access denied'];
+        }
 
         try {
             rename($fullPath, $newPath);
-            return ['success' => true, 'new_path' => dirname($relativePath) . '/' . $newName];
+
+            return ['success' => true, 'new_path' => dirname($relativePath).'/'.$newName];
         } catch (\Throwable $e) {
             return ['success' => false, 'error' => $e->getMessage()];
         }
@@ -190,15 +222,16 @@ class FileService
         $sourcePath = $this->resolvePath($sourceRelativePath);
         $targetDir = $this->resolvePath($targetRelativePath);
 
-        if (!$sourcePath || !$targetDir) {
+        if (! $sourcePath || ! $targetDir) {
             return ['success' => false, 'error' => 'Access denied'];
         }
 
         $fileName = basename($sourcePath);
-        $targetFullPath = rtrim($targetDir, '/') . '/' . $fileName;
+        $targetFullPath = rtrim($targetDir, '/').'/'.$fileName;
 
         try {
             rename($sourcePath, $targetFullPath);
+
             return ['success' => true];
         } catch (\Throwable $e) {
             return ['success' => false, 'error' => $e->getMessage()];
@@ -213,12 +246,12 @@ class FileService
         $sourcePath = $this->resolvePath($sourceRelativePath);
         $targetDir = $this->resolvePath($targetRelativePath);
 
-        if (!$sourcePath || !$targetDir) {
+        if (! $sourcePath || ! $targetDir) {
             return ['success' => false, 'error' => 'Access denied'];
         }
 
         $fileName = basename($sourcePath);
-        $targetFullPath = rtrim($targetDir, '/') . '/' . $fileName;
+        $targetFullPath = rtrim($targetDir, '/').'/'.$fileName;
 
         try {
             if (is_dir($sourcePath)) {
@@ -240,7 +273,7 @@ class FileService
     {
         $fullPath = $this->resolvePath($relativePath);
 
-        if (!$fullPath) {
+        if (! $fullPath) {
             return ['success' => false, 'error' => 'Access denied'];
         }
 
@@ -264,7 +297,7 @@ class FileService
     {
         $fullPath = $this->resolvePath($relativePath);
 
-        if (!$fullPath) {
+        if (! $fullPath || ! is_dir($fullPath)) {
             return ['success' => false, 'error' => 'Access denied'];
         }
 
@@ -274,8 +307,19 @@ class FileService
             return ['success' => false, 'error' => 'File exceeds maximum upload size'];
         }
 
+        $originalName = (string) $uploadedFile->getClientOriginalName();
+
+        if ($error = $this->assertSafeName($originalName)) {
+            return ['success' => false, 'error' => $error];
+        }
+
+        if (! $this->isAllowedFilename($originalName)) {
+            return ['success' => false, 'error' => 'This file extension is not allowed.'];
+        }
+
         try {
-            $uploadedFile->move($fullPath, $uploadedFile->getClientOriginalName());
+            $uploadedFile->move($fullPath, $originalName);
+
             return ['success' => true];
         } catch (\Throwable $e) {
             return ['success' => false, 'error' => $e->getMessage()];
@@ -289,7 +333,7 @@ class FileService
     {
         $fullPath = $this->resolvePath($relativePath);
 
-        if (!$fullPath || !File::exists($fullPath)) {
+        if (! $fullPath || ! File::exists($fullPath)) {
             return null;
         }
 
@@ -307,12 +351,12 @@ class FileService
     {
         $fullPath = $this->resolvePath($relativePath);
 
-        if (!$fullPath || !is_dir($fullPath)) {
+        if (! $fullPath || ! is_dir($fullPath)) {
             return null;
         }
 
-        $zipFile = tempnam(sys_get_temp_dir(), 'hermes_zip_') . '.zip';
-        $zip = new \ZipArchive();
+        $zipFile = tempnam(sys_get_temp_dir(), 'hermes_zip_').'.zip';
+        $zip = new \ZipArchive;
 
         if ($zip->open($zipFile, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
             return null;
@@ -331,12 +375,12 @@ class FileService
     {
         $fullPath = $this->resolvePath($relativePath);
 
-        if (!$fullPath || !is_dir($fullPath)) {
+        if (! $fullPath || ! is_dir($fullPath)) {
             return [];
         }
 
         $results = [];
-        $pattern = '/' . preg_quote($query, '/') . '/i';
+        $pattern = '/'.preg_quote($query, '/').'/i';
 
         if ($recursive) {
             $iterator = new \RecursiveIteratorIterator(
@@ -356,13 +400,15 @@ class FileService
             }
         } else {
             foreach (scandir($fullPath) as $entry) {
-                if ($entry === '.' || $entry === '..') continue;
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
                 if (preg_match($pattern, $entry)) {
-                    $relPath = rtrim($relativePath, '/') . '/' . $entry;
+                    $relPath = rtrim($relativePath, '/').'/'.$entry;
                     $results[] = [
                         'name' => $entry,
                         'path' => $relPath,
-                        'is_directory' => is_dir($fullPath . '/' . $entry),
+                        'is_directory' => is_dir($fullPath.'/'.$entry),
                     ];
                 }
             }
@@ -378,12 +424,13 @@ class FileService
     {
         $fullPath = $this->resolvePath($relativePath);
 
-        if (!$fullPath) {
+        if (! $fullPath) {
             return ['success' => false, 'error' => 'Access denied'];
         }
 
         try {
             chmod($fullPath, $permissions);
+
             return ['success' => true, 'permissions' => substr(sprintf('%o', $permissions), -4)];
         } catch (\Throwable $e) {
             return ['success' => false, 'error' => $e->getMessage()];
@@ -401,15 +448,113 @@ class FileService
             return $basePath;
         }
 
-        $fullPath = $basePath . '/' . ltrim($relativePath, '/');
+        $fullPath = $basePath.'/'.ltrim($relativePath, '/');
         $realPath = realpath($fullPath);
         $realBase = realpath($basePath);
 
-        if (!$realPath || !$realBase || !str_starts_with($realPath, $realBase)) {
+        if (! $realPath || ! $realBase || ! str_starts_with($realPath, $realBase)) {
             return null;
         }
 
         return $realPath;
+    }
+
+    /**
+     * Validate a single path segment supplied by the user (file or directory
+     * name). Returns null when safe, or an error message when rejected.
+     *
+     * Rules:
+     *   - non-empty, ASCII printable, max 255 chars
+     *   - no path separators (/, \)
+     *   - no traversal segment (..)
+     *   - no leading dot (avoids accidentally writing .htaccess, .env, .git/*)
+     *   - no shell metacharacters that surface in URLs / shells
+     */
+    public function assertSafeName(string $name): ?string
+    {
+        $name = trim($name);
+
+        if ($name === '') {
+            return 'Name is required.';
+        }
+
+        if (strlen($name) > 255) {
+            return 'Name is too long (max 255 characters).';
+        }
+
+        if (str_contains($name, '/') || str_contains($name, '\\') || $name === '..' || str_starts_with($name, '..')) {
+            return 'Name must not contain path separators or traversal segments.';
+        }
+
+        if (str_starts_with($name, '.')) {
+            return 'Names starting with "." are not allowed (use SSH for hidden files).';
+        }
+
+        if (preg_match('/[\x00-\x1F\x7F"\*\?<>\|;`$]/', $name)) {
+            return 'Name contains illegal characters.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether a filename's extension is permitted for write/upload. Refuses
+     * server-executable types unless explicitly allowed in panel config.
+     *
+     * Operators who genuinely need to upload a `.php` file (e.g. patching a
+     * project) should use the SSH terminal or temporarily extend
+     * `panel.upload_allowed_extensions`.
+     */
+    public function isAllowedFilename(string $name): bool
+    {
+        $name = strtolower($name);
+
+        // Reject Apache/Nginx config bombs by full filename.
+        $blockedNames = ['.htaccess', '.htpasswd', 'web.config', '.user.ini'];
+
+        foreach ($blockedNames as $blocked) {
+            if ($name === $blocked) {
+                return false;
+            }
+        }
+
+        // Default executable blocklist. Override via
+        // config('panel.upload_blocked_extensions', […]) if needed.
+        $defaultBlocked = [
+            'php', 'phar', 'phtml', 'php3', 'php4', 'php5', 'php7', 'php8',
+            'pl', 'cgi', 'jsp', 'asp', 'aspx', 'sh', 'bash', 'zsh',
+            'exe', 'bat', 'cmd', 'com', 'msi', 'dll', 'vbs',
+        ];
+
+        $blocked = array_map('strtolower', array_filter(
+            (array) config('panel.upload_blocked_extensions', $defaultBlocked),
+            'is_string',
+        ));
+
+        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+
+        if ($extension === '') {
+            return true;     // extension-less files (LICENSE, README) are fine
+        }
+
+        return ! in_array($extension, $blocked, true);
+    }
+
+    /**
+     * Whether the supplied absolute path resolves to somewhere inside the
+     * sandbox base. Used as defence-in-depth against off-by-one mistakes in
+     * the per-call validators.
+     */
+    protected function isUnderBasePath(string $absolutePath): bool
+    {
+        $realBase = realpath($this->getBasePath());
+        $realTarget = realpath($absolutePath);
+
+        if (! $realBase || ! $realTarget) {
+            return false;
+        }
+
+        return str_starts_with($realTarget, $realBase);
     }
 
     /**
@@ -422,7 +567,7 @@ class FileService
         $current = '';
 
         foreach ($parts as $part) {
-            $current .= '/' . $part;
+            $current .= '/'.$part;
             $breadcrumbs[] = ['name' => $part, 'path' => $current];
         }
 
@@ -447,15 +592,17 @@ class FileService
 
     protected function copyDirectory(string $source, string $target): void
     {
-        if (!is_dir($target)) {
+        if (! is_dir($target)) {
             mkdir($target, 0755, true);
         }
 
         foreach (scandir($source) as $entry) {
-            if ($entry === '.' || $entry === '..') continue;
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
 
-            $src = $source . '/' . $entry;
-            $dst = $target . '/' . $entry;
+            $src = $source.'/'.$entry;
+            $dst = $target.'/'.$entry;
 
             if (is_dir($src)) {
                 $this->copyDirectory($src, $dst);
@@ -468,10 +615,12 @@ class FileService
     protected function zipRecursive(\ZipArchive $zip, string $dir, string $baseName): void
     {
         foreach (scandir($dir) as $entry) {
-            if ($entry === '.' || $entry === '..') continue;
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
 
-            $path = $dir . '/' . $entry;
-            $zipPath = $baseName . '/' . $entry;
+            $path = $dir.'/'.$entry;
+            $zipPath = $baseName.'/'.$entry;
 
             if (is_dir($path)) {
                 $zip->addEmptyDir($zipPath);
