@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
+use App\Services\DatabaseService;
 use App\Services\ProjectService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 
@@ -12,6 +14,7 @@ class DashboardController extends Controller
 {
     public function __construct(
         protected ProjectService $projectService,
+        protected DatabaseService $dbService,
     ) {}
 
     public function index()
@@ -38,17 +41,8 @@ class DashboardController extends Controller
             'projects' => count($allProjects),
         ];
 
-        // Try to count tables if project has DB config
         if ($activeProject && $activeProject['type'] === 'laravel') {
-            try {
-                $env = $this->projectService->readEnvRaw($activeProject['path']);
-                if (! empty($env['DB_DATABASE'])) {
-                    $this->configureProjectDb($env);
-                    $stats['tables'] = count(\DB::select('SHOW TABLES'));
-                }
-            } catch (\Throwable $e) {
-                // DB not available
-            }
+            $stats['tables'] = $this->countProjectTables($activeProject['path']);
         }
 
         return view('panel.dashboard', [
@@ -97,24 +91,35 @@ class DashboardController extends Controller
         return response()->json(['success' => true, 'logs' => array_values($recent)]);
     }
 
-    protected function configureProjectDb(array $env): void
+    /**
+     * Count user tables in the project's primary database.
+     *
+     * Uses a dedicated `panel_project_primary` connection — same one the
+     * Database tab uses — so we never overwrite Laravel's own default
+     * connection (which used to leak the project's DB credentials into
+     * any subsequent code path that called DB::connection() unqualified).
+     */
+    protected function countProjectTables(string $projectPath): int
     {
-        $connection = $env['DB_CONNECTION'] ?? 'mysql';
+        try {
+            $env = $this->projectService->readEnvRaw($projectPath);
+            if (empty($env['DB_DATABASE'])) {
+                return 0;
+            }
 
-        config([
-            "database.connections.{$connection}" => [
-                'driver' => $connection,
-                'host' => $env['DB_HOST'] ?? '127.0.0.1',
-                'port' => $env['DB_PORT'] ?? 3306,
-                'database' => $env['DB_DATABASE'] ?? '',
-                'username' => $env['DB_USERNAME'] ?? 'root',
-                'password' => $env['DB_PASSWORD'] ?? '',
-                'charset' => $connection === 'mysql' ? 'utf8mb4' : 'utf8',
-                'prefix' => '',
-                'strict' => true,
-            ],
-        ]);
+            $this->dbService->configureConnection('primary', $env);
 
-        \DB::setDefaultConnection($connection);
+            $driver = strtolower($env['DB_CONNECTION'] ?? 'mysql');
+
+            return match ($driver) {
+                'pgsql' => count(DB::connection('panel_project_primary')->select(
+                    "SELECT tablename FROM pg_tables WHERE schemaname = 'public'",
+                )),
+                default => count(DB::connection('panel_project_primary')->select('SHOW TABLES')),
+            };
+        } catch (\Throwable) {
+            // DB not available — dashboard still renders without the count.
+            return 0;
+        }
     }
 }

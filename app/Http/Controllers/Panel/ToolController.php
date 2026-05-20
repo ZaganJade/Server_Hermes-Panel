@@ -3,13 +3,22 @@
 namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\CleanupDatabaseTrash;
 use App\Services\ProjectService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 
 class ToolController extends Controller
 {
+    /**
+     * Per-request memo of (`true` once configured) so the queue endpoints
+     * stop re-reading `.env` and re-registering the `panel_queue`
+     * connection on every AJAX call. Mirrors EFF-2 in DatabaseController.
+     */
+    protected bool $queueConnectionConfigured = false;
+
     public function __construct(
         protected ProjectService $projectService,
     ) {}
@@ -19,6 +28,40 @@ class ToolController extends Controller
         $project = $this->projectService->getActiveProject();
 
         return $project ? $project['path'] : null;
+    }
+
+    /**
+     * Lazily register the project's DB credentials as the `panel_queue`
+     * connection. Returns true on success, false when the project has
+     * no DB configured. Idempotent within a single request.
+     */
+    protected function configureProjectQueueConnection(string $projectPath): bool
+    {
+        if ($this->queueConnectionConfigured) {
+            return true;
+        }
+
+        $env = $this->projectService->readEnvRaw($projectPath);
+
+        if (empty($env['DB_DATABASE'])) {
+            return false;
+        }
+
+        config(['database.connections.panel_queue' => [
+            'driver' => $env['DB_CONNECTION'] ?? 'mysql',
+            'host' => $env['DB_HOST'] ?? '127.0.0.1',
+            'port' => $env['DB_PORT'] ?? 3306,
+            'database' => $env['DB_DATABASE'] ?? '',
+            'username' => $env['DB_USERNAME'] ?? 'root',
+            'password' => $env['DB_PASSWORD'] ?? '',
+        ]]);
+
+        // New config means a stale connection might be cached — evict it
+        // so the next DB::connection('panel_queue') picks up our writes.
+        DB::purge('panel_queue');
+        $this->queueConnectionConfigured = true;
+
+        return true;
     }
 
     public function index()
@@ -241,61 +284,49 @@ class ToolController extends Controller
 
         $env = $this->projectService->readEnvRaw($projectPath);
 
-        // Configure DB
-        if (! empty($env['DB_DATABASE'])) {
-            config([
-                'database.connections.panel_queue' => [
-                    'driver' => $env['DB_CONNECTION'] ?? 'mysql',
-                    'host' => $env['DB_HOST'] ?? '127.0.0.1',
-                    'port' => $env['DB_PORT'] ?? 3306,
-                    'database' => $env['DB_DATABASE'] ?? '',
-                    'username' => $env['DB_USERNAME'] ?? 'root',
-                    'password' => $env['DB_PASSWORD'] ?? '',
-                ],
-            ]);
-
-            try {
-                $failedJobs = \DB::connection('panel_queue')->table('failed_jobs')->orderBy('failed_at', 'desc')->limit(50)->get();
-                $jobsTable = \DB::connection('panel_queue')->table('jobs')->limit(20)->orderBy('id', 'desc')->get();
-
-                // Get recent jobs from jobs table if exists
-                $recentJobs = [];
-                foreach ($jobsTable as $job) {
-                    $payload = json_decode($job->payload ?? '{}', true);
-                    $recentJobs[] = [
-                        'id' => $job->id,
-                        'name' => $payload['displayName'] ?? 'Unknown',
-                        'queue' => $job->queue ?? 'default',
-                        'attempts' => $job->attempts ?? 0,
-                        'status' => 'pending',
-                        'runtime' => null,
-                        'created_at' => $job->created_at ?? null,
-                    ];
-                }
-
-                // Get queue stats
-                $queueSize = \DB::connection('panel_queue')->table('jobs')->count();
-                $failedCount = \DB::connection('panel_queue')->table('failed_jobs')->count();
-
-                return response()->json([
-                    'success' => true,
-                    'failed_jobs' => $failedJobs,
-                    'failed_count' => $failedCount,
-                    'queue_stats' => [
-                        'driver' => $env['QUEUE_CONNECTION'] ?? 'database',
-                        'connection' => 'default',
-                        'workers' => 0, // Cannot detect from DB
-                        'pid' => null,
-                        'jobs_today' => $queueSize,
-                    ],
-                    'recent_jobs' => $recentJobs,
-                ]);
-            } catch (\Throwable $e) {
-                return response()->json(['success' => true, 'failed_jobs' => [], 'failed_count' => 0, 'queue_stats' => [], 'recent_jobs' => [], 'error' => $e->getMessage()]);
-            }
+        if (! $this->configureProjectQueueConnection($projectPath)) {
+            return response()->json(['success' => true, 'failed_jobs' => [], 'failed_count' => 0, 'queue_stats' => [], 'recent_jobs' => []]);
         }
 
-        return response()->json(['success' => true, 'failed_jobs' => [], 'failed_count' => 0, 'queue_stats' => [], 'recent_jobs' => []]);
+        try {
+            $failedJobs = DB::connection('panel_queue')->table('failed_jobs')->orderBy('failed_at', 'desc')->limit(50)->get();
+            $jobsTable = DB::connection('panel_queue')->table('jobs')->limit(20)->orderBy('id', 'desc')->get();
+
+            // Get recent jobs from jobs table if exists
+            $recentJobs = [];
+            foreach ($jobsTable as $job) {
+                $payload = json_decode($job->payload ?? '{}', true);
+                $recentJobs[] = [
+                    'id' => $job->id,
+                    'name' => $payload['displayName'] ?? 'Unknown',
+                    'queue' => $job->queue ?? 'default',
+                    'attempts' => $job->attempts ?? 0,
+                    'status' => 'pending',
+                    'runtime' => null,
+                    'created_at' => $job->created_at ?? null,
+                ];
+            }
+
+            // Get queue stats
+            $queueSize = DB::connection('panel_queue')->table('jobs')->count();
+            $failedCount = DB::connection('panel_queue')->table('failed_jobs')->count();
+
+            return response()->json([
+                'success' => true,
+                'failed_jobs' => $failedJobs,
+                'failed_count' => $failedCount,
+                'queue_stats' => [
+                    'driver' => $env['QUEUE_CONNECTION'] ?? 'database',
+                    'connection' => 'default',
+                    'workers' => 0, // Cannot detect from DB
+                    'pid' => null,
+                    'jobs_today' => $queueSize,
+                ],
+                'recent_jobs' => $recentJobs,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => true, 'failed_jobs' => [], 'failed_count' => 0, 'queue_stats' => [], 'recent_jobs' => [], 'error' => $e->getMessage()]);
+        }
     }
 
     public function queueRetry(Request $request, $id)
@@ -306,24 +337,18 @@ class ToolController extends Controller
             return response()->json(['success' => false, 'error' => 'No active project']);
         }
 
-        try {
-            $env = $this->projectService->readEnvRaw($projectPath);
-            config(['database.connections.panel_queue' => [
-                'driver' => $env['DB_CONNECTION'] ?? 'mysql',
-                'host' => $env['DB_HOST'] ?? '127.0.0.1',
-                'port' => $env['DB_PORT'] ?? 3306,
-                'database' => $env['DB_DATABASE'] ?? '',
-                'username' => $env['DB_USERNAME'] ?? 'root',
-                'password' => $env['DB_PASSWORD'] ?? '',
-            ]]);
+        if (! $this->configureProjectQueueConnection($projectPath)) {
+            return response()->json(['success' => false, 'error' => 'No database configured']);
+        }
 
-            $job = \DB::connection('panel_queue')->table('failed_jobs')->find($id);
+        try {
+            $job = DB::connection('panel_queue')->table('failed_jobs')->find($id);
 
             if (! $job) {
                 return response()->json(['success' => false, 'error' => 'Job not found']);
             }
 
-            \DB::connection('panel_queue')->table('failed_jobs')->delete($id);
+            DB::connection('panel_queue')->table('failed_jobs')->delete($id);
 
             return response()->json(['success' => true]);
         } catch (\Throwable $e) {
@@ -371,14 +396,24 @@ class ToolController extends Controller
             return response()->json(['success' => false, 'error' => 'No active project']);
         }
 
-        // Dispatch CleanupDatabaseTrash job via artisan
-        $result = Process::path($projectPath)->run('php artisan queue:push CleanupDatabaseTrash --queue=default');
+        // Dispatch CleanupDatabaseTrash directly through Laravel's bus.
+        // The previous `php artisan queue:push` form silently failed
+        // because that's not a real artisan command.
+        try {
+            CleanupDatabaseTrash::dispatch();
 
-        return response()->json([
-            'success' => $result->successful(),
-            'output' => $result->output() ?: 'Cleanup job dispatched.',
-            'error' => $result->errorOutput(),
-        ]);
+            return response()->json([
+                'success' => true,
+                'output' => 'Cleanup job dispatched.',
+                'error' => '',
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'output' => '',
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function queueForget(Request $request, $id)
@@ -389,28 +424,17 @@ class ToolController extends Controller
             return response()->json(['success' => false, 'error' => 'No active project']);
         }
 
-        $env = $this->projectService->readEnvRaw($projectPath);
-
-        if (! empty($env['DB_DATABASE'])) {
-            config(['database.connections.panel_queue' => [
-                'driver' => $env['DB_CONNECTION'] ?? 'mysql',
-                'host' => $env['DB_HOST'] ?? '127.0.0.1',
-                'port' => $env['DB_PORT'] ?? 3306,
-                'database' => $env['DB_DATABASE'] ?? '',
-                'username' => $env['DB_USERNAME'] ?? 'root',
-                'password' => $env['DB_PASSWORD'] ?? '',
-            ]]);
-
-            try {
-                \DB::connection('panel_queue')->table('failed_jobs')->where('id', $id)->delete();
-
-                return response()->json(['success' => true]);
-            } catch (\Throwable $e) {
-                return response()->json(['success' => false, 'error' => $e->getMessage()]);
-            }
+        if (! $this->configureProjectQueueConnection($projectPath)) {
+            return response()->json(['success' => false, 'error' => 'No database configured']);
         }
 
-        return response()->json(['success' => false, 'error' => 'No database configured']);
+        try {
+            DB::connection('panel_queue')->table('failed_jobs')->where('id', $id)->delete();
+
+            return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+        }
     }
 
     public function runComposer(Request $request)
