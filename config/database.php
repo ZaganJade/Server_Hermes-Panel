@@ -32,6 +32,17 @@ return [
 
     'connections' => [
 
+        'monitoring' => [
+            'driver' => 'sqlite',
+            'database' => storage_path('monitoring.sqlite'),
+            'prefix' => '',
+            'foreign_key_constraints' => false,
+            'busy_timeout' => 5000,
+            'journal_mode' => 'WAL',
+            'synchronous' => 'NORMAL',
+            'transaction_mode' => 'DEFERRED',
+        ],
+
         'sqlite' => [
             'driver' => 'sqlite',
             'url' => env('DB_URL'),

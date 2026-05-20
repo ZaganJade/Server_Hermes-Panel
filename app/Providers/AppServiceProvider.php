@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\Monitoring\MetricCollector;
+use App\Services\Monitoring\MetricStorage;
 use App\Services\Monitoring\ProcResolver;
 use App\Services\Monitoring\Readers\ConnectionReader;
 use App\Services\Monitoring\Readers\CpuReader;
@@ -63,6 +64,13 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(MetricCollector::class, fn ($app) => new MetricCollector(
             $app->tagged('monitoring.readers'),
             $app->make(ProcResolver::class),
+        ));
+
+        // Dedicated SQLite for monitoring (storage/monitoring.sqlite).
+        // Single-writer (monitoring-tick) + multi-reader (HTTP) on WAL
+        // mode means we never block the panel UI on a sample write.
+        $this->app->singleton(MetricStorage::class, fn ($app) => new MetricStorage(
+            $app->make('db')->connection('monitoring'),
         ));
     }
 

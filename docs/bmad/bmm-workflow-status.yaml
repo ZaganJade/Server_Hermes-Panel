@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 2
   stories_created: 16
-  stories_completed: 12
+  stories_completed: 13
   active_sprint: "v3.2"
   sprints:
     - id: "v3.1"
@@ -77,7 +77,7 @@ phase_4_implementation:
         - { id: "v3.2-02", title: "Reader interface + Cpu/Memory/Uptime readers",          status: "done",  deps: ["v3.2-01"] }
         - { id: "v3.2-03", title: "DiskUsage/DiskIo/Network/Connection readers",            status: "done",  deps: ["v3.2-02"] }
         - { id: "v3.2-04", title: "Process/Service/Port readers + whitelist patterns",      status: "done",  deps: ["v3.2-02"] }
-        - { id: "v3.2-05", title: "MetricStorage SQLite schema + WAL + aggregate/prune",    status: "ready", deps: ["v3.2-02"] }
+        - { id: "v3.2-05", title: "MetricStorage SQLite schema + WAL + aggregate/prune",    status: "done",  deps: ["v3.2-02"] }
         - { id: "v3.2-06", title: "MonitoringTickLoop + supervisord + ThresholdEvaluator",   status: "ready", deps: ["v3.2-03", "v3.2-04", "v3.2-05"] }
         - { id: "v3.2-07", title: "HTTP API + channel auth + MonitoringController + OpenSpec", status: "ready", deps: ["v3.2-05", "v3.2-06"] }
         - { id: "v3.2-08", title: "Frontend (uPlot + Dashboard strip + full tab) + E2E",     status: "ready", deps: ["v3.2-07"] }
@@ -621,3 +621,21 @@ workflow_log:
       new_tests: 11
       new_assertions: 43
     note: "ProcessReader walks /proc/<pid> via opendir, deduped to ≤10 rows. ServiceReader caches discovery 60s under hermes:monitoring:services:units; pgrep fallback strips '*' suffix from patterns. PortReader subclass-mocked in tests since ss/netstat are external. PortReader and ServiceReader dropped 'final' so test fakes can extend their command-running protected methods. Patterns config: nginx*, mysql*, postgres*, redis*, php-fpm*, docker, caddy, traefik (overridable via PANEL_* env in story 06)."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-05"
+    title: "MetricStorage SQLite schema + WAL + aggregate/prune"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "config/database.php (monitoring connection added with WAL + busy_timeout=5000)"
+      - "app/Services/Monitoring/MetricStorage.php (new)"
+      - "app/Providers/AppServiceProvider.php (singleton binding)"
+      - "tests/Unit/Services/Monitoring/MetricStorageTest.php (new, in-memory SQLite)"
+    tests:
+      total: 143
+      passed: 143
+      assertions: 405
+      new_tests: 8
+      new_assertions: 42
+    note: "Storage layer is broadcast-agnostic. Single-writer (monitoring-tick) + multi-reader (HTTP) on WAL mode. flattenForRaw skips first_sample rate fields so uninitialized counters never reach time-series. Discrete state (process/service/port lists) lives only in latest_snapshot JSON blob. Tests use Capsule-managed :memory: SQLite to avoid touching the real storage path. PRAGMA wal_checkpoint(TRUNCATE) runs after prune to reclaim WAL disk space — wrapped in try/catch so it's best-effort, never fatal."
