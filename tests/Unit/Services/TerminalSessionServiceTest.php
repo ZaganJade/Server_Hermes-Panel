@@ -59,10 +59,13 @@ class TerminalSessionServiceTest extends TestCase
             $this->cache->get('hermes:term:project:desakta')
         );
 
-        $buffer = $this->cache->get("hermes:term:buffer:{$session->sessionId}", []);
-        $this->assertCount(1, $buffer);
-        $this->assertSame('meta', $buffer[0]['type']);
-        $this->assertStringContainsString($session->sessionId, $buffer[0]['data']);
+        $stored = $this->cache->get("hermes:term:buffer:{$session->sessionId}", []);
+        $entries = is_array($stored) && isset($stored['entries'])
+            ? (array) $stored['entries']
+            : (array) $stored;
+        $this->assertCount(1, $entries);
+        $this->assertSame('meta', $entries[0]['type']);
+        $this->assertStringContainsString($session->sessionId, $entries[0]['data']);
     }
 
     public function test_spawn_writes_audit_log(): void
@@ -256,8 +259,11 @@ class TerminalSessionServiceTest extends TestCase
             ]);
         }
 
-        $buffer = $this->cache->get("hermes:term:buffer:{$session->sessionId}", []);
-        $totalBytes = array_sum(array_map(fn ($c) => strlen($c['data'] ?? ''), $buffer));
+        $stored = $this->cache->get("hermes:term:buffer:{$session->sessionId}", []);
+        $entries = is_array($stored) && isset($stored['entries'])
+            ? (array) $stored['entries']
+            : (array) $stored;
+        $totalBytes = array_sum(array_map(fn ($c) => strlen($c['data'] ?? ''), $entries));
 
         $this->assertLessThanOrEqual(
             TerminalSessionService::BUFFER_BYTES_CAP,
