@@ -10,6 +10,9 @@ use App\Services\Monitoring\Readers\DiskIoReader;
 use App\Services\Monitoring\Readers\DiskUsageReader;
 use App\Services\Monitoring\Readers\MemoryReader;
 use App\Services\Monitoring\Readers\NetworkReader;
+use App\Services\Monitoring\Readers\PortReader;
+use App\Services\Monitoring\Readers\ProcessReader;
+use App\Services\Monitoring\Readers\ServiceReader;
 use App\Services\Monitoring\Readers\UptimeReader;
 use App\Services\ProjectService;
 use App\Services\TerminalCommandPolicy;
@@ -52,6 +55,9 @@ class AppServiceProvider extends ServiceProvider
             DiskIoReader::class,
             NetworkReader::class,
             ConnectionReader::class,
+            ProcessReader::class,
+            ServiceReader::class,
+            PortReader::class,
         ], 'monitoring.readers');
 
         $this->app->singleton(MetricCollector::class, fn ($app) => new MetricCollector(

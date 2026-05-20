@@ -118,4 +118,23 @@ return [
     |--------------------------------------------------------------------------
     */
     'discovery_cache_ttl' => 300, // 5 minutes
+
+    /*
+    |--------------------------------------------------------------------------
+    | Monitoring (v3.2)
+    |--------------------------------------------------------------------------
+    | Threshold + service-discovery configuration for the VPS monitoring
+    | sub-project. ServiceReader uses these patterns (fnmatch globs) to
+    | filter systemctl list-units output and as bases for the pgrep
+    | fallback when systemctl is unavailable.
+    */
+    'monitoring' => [
+        'service_patterns' => [
+            'nginx*', 'apache2*', 'caddy*', 'traefik*',
+            'mysql*', 'mariadb*', 'postgres*', 'postgresql*',
+            'redis*', 'memcached*',
+            'php-fpm*', 'php*-fpm*',
+            'docker', 'containerd', 'podman',
+        ],
+    ],
 ];

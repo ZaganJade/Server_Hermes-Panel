@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 2
   stories_created: 16
-  stories_completed: 11
+  stories_completed: 12
   active_sprint: "v3.2"
   sprints:
     - id: "v3.1"
@@ -76,7 +76,7 @@ phase_4_implementation:
         - { id: "v3.2-01", title: "Mount /proc, /sys + ProcResolver",                       status: "done",  deps: [] }
         - { id: "v3.2-02", title: "Reader interface + Cpu/Memory/Uptime readers",          status: "done",  deps: ["v3.2-01"] }
         - { id: "v3.2-03", title: "DiskUsage/DiskIo/Network/Connection readers",            status: "done",  deps: ["v3.2-02"] }
-        - { id: "v3.2-04", title: "Process/Service/Port readers + whitelist patterns",      status: "ready", deps: ["v3.2-02"] }
+        - { id: "v3.2-04", title: "Process/Service/Port readers + whitelist patterns",      status: "done",  deps: ["v3.2-02"] }
         - { id: "v3.2-05", title: "MetricStorage SQLite schema + WAL + aggregate/prune",    status: "ready", deps: ["v3.2-02"] }
         - { id: "v3.2-06", title: "MonitoringTickLoop + supervisord + ThresholdEvaluator",   status: "ready", deps: ["v3.2-03", "v3.2-04", "v3.2-05"] }
         - { id: "v3.2-07", title: "HTTP API + channel auth + MonitoringController + OpenSpec", status: "ready", deps: ["v3.2-05", "v3.2-06"] }
@@ -601,3 +601,23 @@ workflow_log:
       new_tests: 9
       new_assertions: 54
     note: "All 4 readers handle their delta/first-sample edge case: DiskIo and Network mark first_sample=true and return null rates on first call. df --output replaces -P flag (mutually exclusive on GNU coreutils). Loop/ram devices filtered from disk I/O; lo + zero-traffic interfaces filtered from network. Connection reader gracefully handles missing /proc/net/tcp6."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-04"
+    title: "Process/Service/Port readers + whitelist patterns"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "app/Services/Monitoring/Readers/ProcessReader.php (new, top 5 CPU + top 5 RSS deduped)"
+      - "app/Services/Monitoring/Readers/ServiceReader.php (new, systemctl + pgrep fallback)"
+      - "app/Services/Monitoring/Readers/PortReader.php (new, ss + netstat fallback)"
+      - "config/panel.php (monitoring.service_patterns added)"
+      - "app/Providers/AppServiceProvider.php (3 readers added to monitoring.readers tag)"
+      - "tests/Unit/Services/Monitoring/Readers/{Process,Service,Port}ReaderTest.php (new)"
+    tests:
+      total: 135
+      passed: 135
+      assertions: 363
+      new_tests: 11
+      new_assertions: 43
+    note: "ProcessReader walks /proc/<pid> via opendir, deduped to ≤10 rows. ServiceReader caches discovery 60s under hermes:monitoring:services:units; pgrep fallback strips '*' suffix from patterns. PortReader subclass-mocked in tests since ss/netstat are external. PortReader and ServiceReader dropped 'final' so test fakes can extend their command-running protected methods. Patterns config: nginx*, mysql*, postgres*, redis*, php-fpm*, docker, caddy, traefik (overridable via PANEL_* env in story 06)."
