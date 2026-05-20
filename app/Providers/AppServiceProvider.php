@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\Monitoring\ProcResolver;
 use App\Services\ProjectService;
 use App\Services\TerminalCommandPolicy;
 use App\Services\TerminalSessionService;
@@ -24,6 +25,11 @@ class AppServiceProvider extends ServiceProvider
             $app->make(CacheRepository::class),
             $app->make(TerminalCommandPolicy::class),
         ));
+
+        // Single ProcResolver shared by every monitoring reader. The
+        // resolver autodetects /host/proc inside the container and falls
+        // back to /proc on host/dev runs.
+        $this->app->singleton(ProcResolver::class, fn () => ProcResolver::autodetect());
     }
 
     /**

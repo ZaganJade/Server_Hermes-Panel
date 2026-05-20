@@ -4,7 +4,7 @@
 project_name: "Hermes Panel"
 project_level: 3
 adoption_strategy: "forward-only"
-last_workflow: "sprint-planning"
+last_workflow: "dev-story"
 last_workflow_date: "2026-05-20"
 initialized_at: "2026-05-19"
 initialized_by: "manual setup (Strategy A: forward-only)"
@@ -50,7 +50,7 @@ phase_3_solutioning:
 phase_4_implementation:
   sprints_planned: 2
   stories_created: 16
-  stories_completed: 8
+  stories_completed: 9
   active_sprint: "v3.2"
   sprints:
     - id: "v3.1"
@@ -73,7 +73,7 @@ phase_4_implementation:
       design_doc: "docs/superpowers/specs/2026-05-20-vps-monitoring-design.md"
       story_index: "docs/bmad/stories/v3.2-INDEX.md"
       stories:
-        - { id: "v3.2-01", title: "Mount /proc, /sys + ProcResolver",                       status: "ready", deps: [] }
+        - { id: "v3.2-01", title: "Mount /proc, /sys + ProcResolver",                       status: "done",  deps: [] }
         - { id: "v3.2-02", title: "Reader interface + Cpu/Memory/Uptime readers",          status: "ready", deps: ["v3.2-01"] }
         - { id: "v3.2-03", title: "DiskUsage/DiskIo/Network/Connection readers",            status: "ready", deps: ["v3.2-02"] }
         - { id: "v3.2-04", title: "Process/Service/Port readers + whitelist patterns",      status: "ready", deps: ["v3.2-02"] }
@@ -537,3 +537,22 @@ workflow_log:
     stories_created: 8
     story_index: "docs/bmad/stories/v3.2-INDEX.md"
     note: "v3.2 sub-project decomposed into 8 stories. 1-2 independent of v3.1, 3-5 share Reader infrastructure, 6 ties everything together, 7 exposes HTTP+channel, 8 closes with frontend+E2E. Worked directly on feature branch (no story branches), per v3.1 final pattern."
+  - workflow: "dev-story"
+    date: "2026-05-20"
+    sprint: "v3.2"
+    story: "v3.2-01"
+    title: "Mount /proc, /sys + ProcResolver + autodetect"
+    branch: "feature/v3.2-vps-monitoring (direct)"
+    files_touched:
+      - "docker-compose.yml (read-only /proc and /sys mounts)"
+      - "app/Services/Monitoring/ProcResolver.php (new)"
+      - "app/Providers/AppServiceProvider.php (singleton binding)"
+      - "tests/Unit/Services/Monitoring/ProcResolverTest.php (new)"
+      - "README.md (VPS monitoring stub section)"
+    tests:
+      total: 101
+      passed: 101
+      assertions: 211
+      new_tests: 6
+      new_assertions: 14
+    note: "Foundation for v3.2 readers. Autodetect is OS-aware: returns /host/proc on Linux container, /proc on Linux host, both choices acceptable on Windows dev (filesystem reality not asserted there). Singleton binding ensures every reader gets the same resolved root."

@@ -427,7 +427,6 @@ and the SQL identifier validator is still on the to-do list.
 ---
 
 ## Real-time terminal (v3.1, in progress)
-
 The panel ships with a sandboxed shell scoped to the active project. As
 of v3.1 it is being upgraded from synchronous request-response to a
 streaming model backed by Laravel Reverb.
@@ -483,6 +482,28 @@ session service + cache schema, tick-loop with broadcast, and the HTTP
 API + channel auth. The streaming UI itself — floating panel, xterm.js,
 client-side reconnect/replay — lands in stories 06–07. See
 `docs/bmad/stories/v3.1-INDEX.md` for the full breakdown.
+
+---
+
+## VPS monitoring (v3.2, in progress)
+
+Lightweight host monitoring built into the panel: CPU, memory, disk,
+network, services, and listening ports sampled every 5 seconds and
+streamed to the browser via Reverb on the same channel infrastructure
+v3.1 introduced.
+
+**How it's wired**
+
+- Host `/proc` and `/sys` are mounted read-only into the container at `/host/proc` and `/host/sys` (see `docker-compose.yml`). Outside the container the panel reads directly from `/proc` and `/sys`.
+- A `ProcResolver` autodetects which root to use, so every reader stays portable across container, host, and dev runs.
+- Sample data lives in a dedicated SQLite at `storage/monitoring.sqlite` (WAL mode). Panel-DB outages don't affect monitoring, and vice versa.
+
+**Status**
+
+v3.2 sub-project is split into 8 stories. As of this README, story 01
+(volume mounts + `ProcResolver`) is the foundation. Readers, storage,
+the tick-loop, HTTP API, and the floating dashboard land across stories
+02–08. See `docs/bmad/stories/v3.2-INDEX.md` for the full breakdown.
 
 ---
 
