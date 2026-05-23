@@ -67,7 +67,7 @@ final class MetricStorage
             'CREATE TABLE IF NOT EXISTS latest_snapshot (
                 ts INTEGER NOT NULL PRIMARY KEY,
                 payload TEXT NOT NULL
-            ) WITHOUT ROWID',
+            )',
         ];
 
         foreach ($statements as $sql) {
