@@ -542,7 +542,6 @@ These are real gaps, not marketing copy:
 
 - The terminal upgrade is in progress (v3.1). Until story 07 lands, the existing File Manager terminal continues to use the synchronous `/execute-sync` path. Long-running interactive output should keep going through SSH for now.
 - The file editor is a styled `<textarea>`. CodeMirror was on the original wishlist; it isn't installed.
-- `CleanupDatabaseTrash` calls `onlyTrashed()` on the query builder, which only exists on Eloquent models with `SoftDeletes`. The job currently handles this gracefully, but the query path needs rewriting to use `whereNotNull('deleted_at')` directly.
 - Test coverage is thin. Auth middleware behaviour, the path-traversal guard, and the identifier validator are good first targets.
 
 ---

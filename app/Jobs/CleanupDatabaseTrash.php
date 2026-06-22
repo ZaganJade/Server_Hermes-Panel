@@ -50,15 +50,18 @@ class CleanupDatabaseTrash implements ShouldQueue
                 }
 
                 try {
+                    // Raw query builder: no onlyTrashed()/forceDelete() (those
+                    // are Eloquent SoftDeletes helpers). Old trashed rows are
+                    // `deleted_at` older than the cutoff; remove with delete().
                     $deleted = DB::connection($connName)
                         ->table($tableName)
-                        ->onlyTrashed()
+                        ->whereNotNull('deleted_at')
                         ->where('deleted_at', '<', Carbon::now()->subDays(30));
 
                     $count = $deleted->count();
 
                     if ($count > 0) {
-                        $deleted->forceDelete();
+                        $deleted->delete();
                         \Log::info("CleanupDatabaseTrash: {$projectName}.{$tableName} — {$count} rows deleted");
                     }
                 } catch (\Throwable $e) {

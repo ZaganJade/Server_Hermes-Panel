@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Panel;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 
@@ -35,6 +36,11 @@ class AuthController extends Controller
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
             $seconds = RateLimiter::availableIn($throttleKey);
 
+            Log::warning('Panel login throttled', [
+                'username' => $request->input('username'),
+                'ip' => $request->ip(),
+            ]);
+
             throw ValidationException::withMessages([
                 'username' => [sprintf('Too many login attempts. Please try again in %d seconds.', $seconds)],
             ]);
@@ -49,6 +55,10 @@ class AuthController extends Controller
         ) {
             RateLimiter::clear($throttleKey);
 
+            // Regenerate the session ID on login to prevent session fixation:
+            // any ID an attacker may have planted before auth is discarded.
+            $request->session()->regenerate();
+
             $request->session()->put('panel_auth', true);
             $request->session()->put('panel_auth_time', now()->timestamp);
 
@@ -56,6 +66,11 @@ class AuthController extends Controller
         }
 
         RateLimiter::hit($throttleKey, 60);
+
+        Log::warning('Panel login failed', [
+            'username' => $request->input('username'),
+            'ip' => $request->ip(),
+        ]);
 
         throw ValidationException::withMessages([
             'username' => ['Invalid credentials.'],

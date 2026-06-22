@@ -100,6 +100,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Terminal Command Timeout (seconds)
+    |--------------------------------------------------------------------------
+    | Wall-clock limit for a single synchronous terminal command before it is
+    | killed. Bump this for slow builds/migrations; long-running interactive
+    | work should still go through SSH.
+    */
+    'terminal_timeout' => (int) env('PANEL_TERMINAL_TIMEOUT', 60),
+
+    /*
+    |--------------------------------------------------------------------------
     | Artisan Commands (for dropdown suggestions)
     |--------------------------------------------------------------------------
     */

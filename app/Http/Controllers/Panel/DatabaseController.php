@@ -144,7 +144,9 @@ class DatabaseController extends Controller
 
             return response()->json(['success' => true]);
         } catch (\Throwable $e) {
-            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+            report($e);
+
+            return response()->json(['success' => false, 'error' => 'Failed to update cell.']);
         }
     }
 
@@ -174,7 +176,9 @@ class DatabaseController extends Controller
 
             return response()->json(['success' => true, 'id' => $id]);
         } catch (\Throwable $e) {
-            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+            report($e);
+
+            return response()->json(['success' => false, 'error' => 'Failed to insert row.']);
         }
     }
 
@@ -233,14 +237,17 @@ class DatabaseController extends Controller
         }
 
         try {
-            // Count first before deleting (get a fresh count query)
-            $count = DB::connection($connName)->table($table)->onlyTrashed()->count();
-            // Force delete all soft-deleted rows
-            DB::connection($connName)->table($table)->onlyTrashed()->forceDelete();
+            // Count first before deleting (get a fresh count query). Raw
+            // builders have no onlyTrashed()/forceDelete(); soft-deleted rows
+            // are `deleted_at IS NOT NULL`, removed with a plain delete().
+            $count = DB::connection($connName)->table($table)->whereNotNull('deleted_at')->count();
+            DB::connection($connName)->table($table)->whereNotNull('deleted_at')->delete();
 
             return response()->json(['success' => true, 'count' => $count]);
         } catch (\Throwable $e) {
-            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+            report($e);
+
+            return response()->json(['success' => false, 'error' => 'Failed to empty trash.']);
         }
     }
 
@@ -267,7 +274,9 @@ class DatabaseController extends Controller
 
             return response()->json(['success' => true]);
         } catch (\Throwable $e) {
-            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+            report($e);
+
+            return response()->json(['success' => false, 'error' => 'Failed to update row.']);
         }
     }
 
@@ -298,7 +307,9 @@ class DatabaseController extends Controller
 
             return response()->json(['success' => true]);
         } catch (\Throwable $e) {
-            return response()->json(['success' => false, 'error' => $e->getMessage()]);
+            report($e);
+
+            return response()->json(['success' => false, 'error' => 'Failed to delete row.']);
         }
     }
 
