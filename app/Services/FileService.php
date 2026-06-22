@@ -131,7 +131,9 @@ class FileService
 
             return ['success' => true];
         } catch (\Throwable $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
+            report($e);
+
+            return ['success' => false, 'error' => 'Failed to save file.'];
         }
     }
 
@@ -175,7 +177,9 @@ class FileService
 
             return ['success' => true];
         } catch (\Throwable $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
+            report($e);
+
+            return ['success' => false, 'error' => 'Failed to create item.'];
         }
     }
 
@@ -210,7 +214,9 @@ class FileService
 
             return ['success' => true, 'new_path' => dirname($relativePath).'/'.$newName];
         } catch (\Throwable $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
+            report($e);
+
+            return ['success' => false, 'error' => 'Failed to rename item.'];
         }
     }
 
@@ -234,7 +240,9 @@ class FileService
 
             return ['success' => true];
         } catch (\Throwable $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
+            report($e);
+
+            return ['success' => false, 'error' => 'Failed to move item.'];
         }
     }
 
@@ -262,7 +270,9 @@ class FileService
 
             return ['success' => true];
         } catch (\Throwable $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
+            report($e);
+
+            return ['success' => false, 'error' => 'Failed to copy item.'];
         }
     }
 
@@ -286,7 +296,9 @@ class FileService
 
             return ['success' => true];
         } catch (\Throwable $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
+            report($e);
+
+            return ['success' => false, 'error' => 'Failed to delete item.'];
         }
     }
 
@@ -322,7 +334,9 @@ class FileService
 
             return ['success' => true];
         } catch (\Throwable $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
+            report($e);
+
+            return ['success' => false, 'error' => 'Failed to upload file.'];
         }
     }
 
@@ -447,7 +461,9 @@ class FileService
 
             return ['success' => true, 'permissions' => substr(sprintf('%o', $permissions), -4)];
         } catch (\Throwable $e) {
-            return ['success' => false, 'error' => $e->getMessage()];
+            report($e);
+
+            return ['success' => false, 'error' => 'Failed to update permissions.'];
         }
     }
 
@@ -466,7 +482,7 @@ class FileService
         $realPath = realpath($fullPath);
         $realBase = realpath($basePath);
 
-        if (! $realPath || ! $realBase || ! str_starts_with($realPath, $realBase)) {
+        if (! $realPath || ! $realBase || ! $this->pathWithinBase($realPath, $realBase)) {
             return null;
         }
 
@@ -568,7 +584,25 @@ class FileService
             return false;
         }
 
-        return str_starts_with($realTarget, $realBase);
+        return $this->pathWithinBase($realTarget, $realBase);
+    }
+
+    /**
+     * Whether $realPath is the sandbox base itself or a descendant of it.
+     *
+     * Plain `str_starts_with($realPath, $realBase)` is NOT enough: with a
+     * base of `…/Project`, a sibling like `…/Project_backup` shares the
+     * prefix and would slip through. We compare against the base plus a
+     * trailing separator (and allow an exact match). realpath() can return
+     * either separator on Windows depending on the PHP build, so both sides
+     * are normalised to `/` first.
+     */
+    protected function pathWithinBase(string $realPath, string $realBase): bool
+    {
+        $path = str_replace('\\', '/', $realPath);
+        $base = rtrim(str_replace('\\', '/', $realBase), '/');
+
+        return $path === $base || str_starts_with($path, $base.'/');
     }
 
     /**

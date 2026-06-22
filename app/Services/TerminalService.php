@@ -99,7 +99,7 @@ class TerminalService
             $cwd = $this->getCwd();
 
             $process = new Process(['bash', '-c', $command], $cwd);
-            $process->setTimeout(60);
+            $process->setTimeout((int) config('panel.terminal_timeout', 60));
             $process->setEnv(['TERM' => 'dumb', 'NO_COLOR' => '1']);
             $process->run();
 
@@ -153,7 +153,7 @@ class TerminalService
         if (! $resolved || ! is_dir($resolved)) {
             return [
                 'output' => '',
-                'error' => "cd: {$target}: tidak ada direktori tersebut\n",
+                'error' => "cd: {$target}: no such file or directory\n",
                 'cwd' => $current,
                 'exit_code' => 1,
             ];

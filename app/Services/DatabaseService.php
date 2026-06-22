@@ -251,8 +251,11 @@ class DatabaseService
 
         $conn = DB::connection($connectionName);
 
-        // Use onlyTrashed() to get soft-deleted rows
-        $baseQuery = $conn->table($table)->onlyTrashed();
+        // Soft-deleted rows = `deleted_at IS NOT NULL`. We operate on the raw
+        // query builder (DB::table), which has no onlyTrashed()/forceDelete()
+        // — those live on the Eloquent SoftDeletes scope — so we express the
+        // filter directly.
+        $baseQuery = $conn->table($table)->whereNotNull('deleted_at');
         $countQuery = clone $baseQuery;
 
         $total = $countQuery->count();
@@ -286,7 +289,7 @@ class DatabaseService
 
             $affected = DB::connection($connectionName)
                 ->table($table)
-                ->onlyTrashed()
+                ->whereNotNull('deleted_at')
                 ->where($primaryKey, $id)
                 ->update(['deleted_at' => null]);
 
@@ -308,11 +311,11 @@ class DatabaseService
         try {
             $primaryKey = $this->getPrimaryKey($connectionName, $table);
 
-            $affected = DB::connection($connectionName)
+            DB::connection($connectionName)
                 ->table($table)
-                ->onlyTrashed()
+                ->whereNotNull('deleted_at')
                 ->where($primaryKey, $id)
-                ->forceDelete();
+                ->delete();
 
             return true;
         } catch (\Throwable $e) {
@@ -400,11 +403,17 @@ class DatabaseService
                 'count' => count($results),
             ];
         } catch (\QueryException $e) {
+            // Hide internals from the caller, but log them so the operator can
+            // still diagnose a failing query from storage/logs.
+            report($e);
+
             return [
                 'type' => 'error',
                 'error' => 'Query failed. Please check your SQL syntax.',
             ];
         } catch (\Throwable $e) {
+            report($e);
+
             return [
                 'type' => 'error',
                 'error' => 'Database connection error.',
